@@ -1,10 +1,12 @@
 # kiro-sdd-template
 
+English (authoritative) | [日本語](README.ja.md)
+
 A template for Kiro-based spec-driven development, with shared agent instructions, scoped steering, and implementation and review workflows.
 
 This project is intended for individual developers and teams who want to reuse a requirements-driven development process across repositories.
 
-> **Status: Under construction.** The repository currently contains this README and `LICENSE`. Agent instructions, steering, Spec templates, and setup instructions are planned. It is not yet a ready-to-use development environment.
+> **Status: Under construction.** The repository currently contains this README, its Japanese reference translation, and `LICENSE`. Agent instructions, steering, Spec templates, and setup instructions are planned. It is not yet a ready-to-use development environment.
 
 ## Purpose
 
@@ -36,7 +38,7 @@ English is the default language for repository and GitHub artifacts, including:
 
 Interactive reports to the human operator may use the operator's preferred language. For this repository's maintenance workflow, those reports are in Japanese. Reports persisted in the repository or on GitHub remain in English.
 
-No Japanese README is maintained at present. If reference translations are added later, the English artifacts remain authoritative and translations must stay semantically synchronized.
+`README.ja.md` is an explicitly permitted reference translation of this README. The English version remains authoritative; the Japanese version must not independently redefine rules. Update both files in the same change whenever README content changes, keeping their meaning synchronized. This exception does not extend to `AGENTS.md`, steering, Specs, or reports persisted on GitHub.
 
 ## Planned contents
 
@@ -55,7 +57,7 @@ The following components are not yet included. Their paths and setup instruction
 
 Setup and compatibility guidance will be added after the template components are available and verified. Projects adopting the template will need to define their authoritative requirements, acceptance criteria, validation commands, and environment-specific controls.
 
-Use [Issues](https://github.com/kunitaya/kiro-sdd-template/issues) for suggestions and defects. Keep contributions focused, write repository and GitHub content in English, and submit changes through a dedicated branch and pull request.
+Use [Issues](https://github.com/kunitaya/kiro-sdd-template/issues) for suggestions and defects. Keep contributions focused, write repository and GitHub content in English, and submit changes through a dedicated branch and pull request. Changes to the Japanese README follow the reference-translation policy above.
 
 ## Project status and affiliation
 
