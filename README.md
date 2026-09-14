@@ -6,7 +6,7 @@ A template for Kiro-based spec-driven development, with shared agent instruction
 
 This project is intended for individual developers and teams who want to reuse a requirements-driven development process across repositories.
 
-> **Status: Under construction.** The repository currently contains this README, its Japanese reference translation, and `LICENSE`. Agent instructions, steering, Spec templates, and setup instructions are planned. It is not yet a ready-to-use development environment.
+> **Status: Under construction.** The repository currently contains this README, its Japanese reference translation, `LICENSE`, and initial command-selection instructions in [AGENTS.md](AGENTS.md). The remaining agent guidance, steering, Spec templates, and setup instructions are planned. It is not yet a ready-to-use development environment.
 
 ## Purpose
 
@@ -42,11 +42,11 @@ Interactive reports to the human operator may use the operator's preferred langu
 
 ## Planned contents
 
-The following components are not yet included. Their paths and setup instructions will be documented as they are added.
+The following components remain planned or partial. Their paths and setup instructions will be documented as they are added.
 
 | Component | Purpose |
 | --- | --- |
-| `AGENTS.md` | Authority, scope, language, repository safety, and review policy |
+| [AGENTS.md](AGENTS.md) (partial) | Permission-aware command selection is included; the remaining shared policy is planned |
 | `.kiro/steering/` | Scoped workflow, execution, workspace isolation, documentation, and review guidance |
 | Spec templates | Requirements, design, and task artifacts appropriate to the selected workflow |
 | Task prompt templates | Task-specific objectives, constraints, verification, and handoff conditions |
