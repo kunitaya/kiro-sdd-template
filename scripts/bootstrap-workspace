@@ -1,207 +1,684 @@
 #!/bin/sh
-# Deterministic per-worktree Python/uv workspace bootstrap example.
+# Deterministic per-worktree Python workspace bootstrap for Kiro SDD.
+#
+# Generalized directly from the production bootstrap in
+# koseikensetsu/mailbox-privacy-analyzer. Keep the control flow and safety
+# invariants intact; adapt only the project-specific constants below.
 #
 # Usage:
-#   ./scripts/bootstrap-workspace          # establish/repair READY
-#   ./scripts/bootstrap-workspace --check  # non-mutating READY verification
-#
-# This is intentionally generic infrastructure rather than product logic. Projects
-# using a different runtime/environment manager should replace this implementation
-# while preserving an explicit mutating setup path and a fail-closed, non-mutating
-# readiness check if the Kiro PreTaskExec hook is retained.
+#   ./scripts/bootstrap-workspace          # mutating: establish/repair READY
+#   ./scripts/bootstrap-workspace --check  # non-mutating: verify READY only
 
 set -eu
 
-MODE=mutate
-if [ "${1:-}" = "--check" ]; then
-    MODE=check
-    shift
-fi
-if [ "$#" -ne 0 ]; then
-    printf '%s\n' "usage: ./scripts/bootstrap-workspace [--check]" >&2
-    exit 64
-fi
+SELF_NAME="bootstrap-workspace"
+FAIL_EXIT_CODE=1
 
-FAIL_EXIT=1
-[ "$MODE" = check ] && FAIL_EXIT=2
+# ---------------------------------------------------------------------------
+# Project-specific adaptation points
+# ---------------------------------------------------------------------------
+# Replace these values when adopting the template. The script intentionally
+# fails closed while placeholders remain.
+EXPECTED_PROJECT_NAME="<project-name>"
+SOURCE_IMPORT_NAME="<python-import-name>"
+SOURCE_PATH_RELATIVE="src/<python-import-path>"
+# Optional single uv extra used during sync (for example: dev). Leave empty
+# when the project does not require an extra for its development environment.
+UV_SYNC_EXTRA=""
+# Optional space-separated imports that must be available in the READY env.
+# Example: "pypff another_runtime_dependency"
+REQUIRED_IMPORTS=""
+
+STATE_DIR_RELATIVE=".local/kiro-scratch"
+STATE_FILE_NAME="bootstrap-state.json"
+LOCK_METADATA_LOCAL_DIR_RELATIVE=".local"
+LOCK_FILE_NAME="bootstrap.lock"
+LOCK_ACQUIRE_TIMEOUT_SECONDS=5
 
 fail() {
     token="$1"
     shift
     printf '%s\n' "$token" >&2
-    for line in "$@"; do
-        printf '%s\n' "$line" >&2
+    for diagnostic_line in "$@"; do
+        printf '%s\n' "$diagnostic_line" >&2
     done
-    exit "$FAIL_EXIT"
+    exit "$FAIL_EXIT_CODE"
 }
 
-for tool in git uv realpath sha256sum flock date mkdir mv mountpoint; do
-    command -v "$tool" >/dev/null 2>&1 || \
-        fail WORKSPACE_TOOLING_MISSING "Required tool not found on PATH: $tool"
-done
+check_tooling() {
+    for required_tool in git uv realpath mountpoint awk sha256sum date mkdir mv rm flock; do
+        if ! command -v "$required_tool" >/dev/null 2>&1; then
+            fail WORKSPACE_TOOLING_MISSING \
+                "Required tool not found on PATH: $required_tool"
+        fi
+    done
+}
 
-raw_root=$(git rev-parse --show-toplevel 2>/dev/null) || \
-    fail WORKSPACE_NOT_A_GIT_REPO "Current directory is not inside a Git worktree."
-ROOT=$(realpath -- "$raw_root" 2>/dev/null) || \
-    fail WORKSPACE_ROOT_UNRESOLVABLE "Could not resolve the physical worktree root."
-cd "$ROOT"
+resolve_root() {
+    raw_root=$(git rev-parse --show-toplevel 2>/dev/null) || return 1
+    ROOT=$(realpath -- "$raw_root" 2>/dev/null) || return 1
+    return 0
+}
 
-[ -f pyproject.toml ] || \
-    fail WORKSPACE_IDENTITY_MISMATCH "pyproject.toml is missing; adapt the bootstrap contract for this repository."
-[ -f uv.lock ] || \
-    fail WORKSPACE_LOCK_MISSING "uv.lock is missing; create/update the lock through the normal dependency workflow first."
+verify_configuration() {
+    case "$EXPECTED_PROJECT_NAME" in
+        ""|*"<"*|*">"*)
+            fail WORKSPACE_CONFIGURATION_INCOMPLETE \
+                "Set EXPECTED_PROJECT_NAME in scripts/bootstrap-workspace before use."
+            ;;
+    esac
+    case "$SOURCE_IMPORT_NAME" in
+        ""|*"<"*|*">"*)
+            fail WORKSPACE_CONFIGURATION_INCOMPLETE \
+                "Set SOURCE_IMPORT_NAME in scripts/bootstrap-workspace before use."
+            ;;
+    esac
+    case "$SOURCE_PATH_RELATIVE" in
+        ""|/*|*".."*|*"<"*|*">"*)
+            fail WORKSPACE_CONFIGURATION_INCOMPLETE \
+                "Set SOURCE_PATH_RELATIVE to a safe repository-relative path before use."
+            ;;
+    esac
+}
 
-if [ -L .venv ]; then
-    fail WORKSPACE_VENV_FOREIGN ".venv is a symlink; mutable environments must not be shared across worktrees."
-fi
-if [ -e .venv ] && mountpoint -q -- .venv; then
-    fail WORKSPACE_VENV_BIND_MOUNTED ".venv is a mount point; refusing a potentially shared mutable environment."
-fi
+extract_project_name() {
+    awk '
+        /^[[:space:]]*\[project\][[:space:]]*$/ { in_project = 1; next }
+        /^[[:space:]]*\[/ { in_project = 0; next }
+        in_project && /^[[:space:]]*name[[:space:]]*=/ {
+            line = $0
+            sub(/^[^=]*=/, "", line)
+            gsub(/^[[:space:]]+/, "", line)
+            gsub(/[[:space:]]+$/, "", line)
+            gsub(/^["\x27]/, "", line)
+            gsub(/["\x27]$/, "", line)
+            print line
+            exit
+        }
+    ' "$1"
+}
 
-if ! lock_output=$(uv lock --check 2>&1); then
-    fail WORKSPACE_LOCK_INCONSISTENT "uv lock --check failed." "$lock_output"
-fi
+verify_identity() {
+    identity_root="$1"
+    identity_pyproject="$identity_root/pyproject.toml"
 
-STATE_DIR=".local/kiro-scratch"
-STATE_FILE="$STATE_DIR/bootstrap-state.json"
-LOCK_FILE="$STATE_DIR/bootstrap-workspace.lock"
+    if [ ! -f "$identity_pyproject" ]; then
+        fail WORKSPACE_IDENTITY_MISMATCH \
+            "Expected identity marker not found: $identity_pyproject"
+    fi
 
-verify_python_binding() {
-    [ -x .venv/bin/python ] || return 1
-    .venv/bin/python -B - "$ROOT" <<'PY' >/dev/null 2>&1
-import pathlib
+    identity_project_name=$(extract_project_name "$identity_pyproject")
+    if [ "$identity_project_name" != "$EXPECTED_PROJECT_NAME" ]; then
+        if [ -z "$identity_project_name" ]; then
+            identity_project_name="<none found>"
+        fi
+        fail WORKSPACE_IDENTITY_MISMATCH \
+            "pyproject.toml [project] name mismatch: expected '$EXPECTED_PROJECT_NAME', found '$identity_project_name' in $identity_pyproject"
+    fi
+}
+
+is_component_descendant() {
+    descendant_candidate="$1"
+    descendant_ancestor="$2"
+    case "$descendant_candidate" in
+        "$descendant_ancestor"|"$descendant_ancestor"/*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+verify_venv_not_foreign() {
+    foreign_root="$1"
+    foreign_venv_path="$foreign_root/.venv"
+
+    if [ ! -e "$foreign_venv_path" ] && [ ! -L "$foreign_venv_path" ]; then
+        return 0
+    fi
+
+    if [ -L "$foreign_venv_path" ]; then
+        if foreign_resolved=$(realpath -- "$foreign_venv_path" 2>/dev/null); then
+            fail WORKSPACE_VENV_FOREIGN \
+                "$foreign_venv_path is a symlink to $foreign_resolved; a symlinked .venv is never treated as belonging to this worktree."
+        fi
+        fail WORKSPACE_VENV_FOREIGN \
+            "$foreign_venv_path is a symlink whose target could not be resolved."
+    fi
+
+    if ! foreign_resolved=$(realpath -- "$foreign_venv_path" 2>/dev/null); then
+        fail WORKSPACE_VENV_FOREIGN \
+            "$foreign_venv_path could not be resolved via realpath."
+    fi
+
+    if ! is_component_descendant "$foreign_resolved" "$foreign_root"; then
+        fail WORKSPACE_VENV_FOREIGN \
+            "$foreign_venv_path resolves to $foreign_resolved, which is not under this worktree's root ($foreign_root)."
+    fi
+}
+
+verify_venv_not_bind_mounted() {
+    mount_root="$1"
+    mount_venv_path="$mount_root/.venv"
+
+    if [ ! -e "$mount_venv_path" ]; then
+        return 0
+    fi
+
+    if mountpoint -q -- "$mount_venv_path"; then
+        fail WORKSPACE_VENV_BIND_MOUNTED \
+            "$mount_venv_path is itself a separate filesystem mount point; refusing to sync into a potentially shared .venv."
+    fi
+}
+
+compute_fingerprint() {
+    fingerprint_root="$1"
+
+    FP_REPO_ROOT="$fingerprint_root"
+    FP_PYTHON_VERSION=$("$fingerprint_root/.venv/bin/python" -B -c '
 import sys
-
-root = pathlib.Path(sys.argv[1]).resolve()
-expected = (root / ".venv").resolve()
-prefix = pathlib.Path(sys.prefix).resolve()
-exe = pathlib.Path(sys.executable).resolve()
-if prefix != expected:
-    raise SystemExit(2)
-if exe != expected and expected not in exe.parents:
-    raise SystemExit(2)
-PY
+print("{0}.{1}.{2}".format(*sys.version_info[:3]))
+')
+    FP_PYPROJECT_SHA256=$(sha256sum -- "$fingerprint_root/pyproject.toml" | awk '{ print $1 }')
+    FP_UV_LOCK_SHA256=$(sha256sum -- "$fingerprint_root/uv.lock" | awk '{ print $1 }')
 }
 
-compute_values() {
-    verify_python_binding || \
-        fail WORKSPACE_VENV_NOT_READY ".venv/bin/python is missing or is not bound to this worktree's .venv."
-    PYTHON_VERSION=$(.venv/bin/python -B -c 'import sys; print("{}.{}.{}".format(*sys.version_info[:3]))')
-    PYPROJECT_SHA=$(sha256sum -- pyproject.toml | awk '{print $1}')
-    UVLOCK_SHA=$(sha256sum -- uv.lock | awk '{print $1}')
-}
+parse_state_file() {
+    parse_target="$1"
+    parse_python_bin="$2"
 
-state_matches() {
-    [ -f "$STATE_FILE" ] || return 1
-    .venv/bin/python -B - "$STATE_FILE" "$ROOT" "$PYTHON_VERSION" "$PYPROJECT_SHA" "$UVLOCK_SHA" <<'PY'
+    "$parse_python_bin" -B -c '
 import json
-import pathlib
 import sys
 
-path = pathlib.Path(sys.argv[1])
-expected = {
+state_path = sys.argv[1]
+try:
+    with open(state_path, "rb") as state_file:
+        raw_bytes = state_file.read()
+except OSError:
+    sys.exit(2)
+try:
+    text = raw_bytes.decode("utf-8")
+except UnicodeDecodeError:
+    sys.exit(2)
+try:
+    data = json.loads(text)
+except json.JSONDecodeError:
+    sys.exit(2)
+if not isinstance(data, dict):
+    sys.exit(2)
+expected_fields = {
+    "format_version",
+    "repo_root",
+    "python_version",
+    "pyproject_sha256",
+    "uv_lock_sha256",
+    "bootstrapped_at",
+}
+if set(data.keys()) != expected_fields:
+    sys.exit(2)
+format_version = data["format_version"]
+if isinstance(format_version, bool) or not isinstance(format_version, int) or format_version != 1:
+    sys.exit(2)
+for field_name in (
+    "repo_root",
+    "python_version",
+    "pyproject_sha256",
+    "uv_lock_sha256",
+    "bootstrapped_at",
+):
+    value = data[field_name]
+    if not isinstance(value, str) or value == "":
+        sys.exit(2)
+hex_digits = set("0123456789abcdef")
+for hash_field_name in ("pyproject_sha256", "uv_lock_sha256"):
+    hash_value = data[hash_field_name]
+    if len(hash_value) != 64 or any(char not in hex_digits for char in hash_value):
+        sys.exit(2)
+print(data["repo_root"])
+print(data["python_version"])
+print(data["pyproject_sha256"])
+print(data["uv_lock_sha256"])
+print(data["bootstrapped_at"])
+' "$parse_target"
+}
+
+read_state() {
+    state_root="$1"
+    state_file="$state_root/$STATE_DIR_RELATIVE/$STATE_FILE_NAME"
+
+    if [ ! -e "$state_file" ]; then
+        return 1
+    fi
+
+    if ! state_parsed=$(parse_state_file "$state_file" "$state_root/.venv/bin/python" 2>/dev/null); then
+        return 2
+    fi
+
+    state_old_ifs=$IFS
+    IFS='
+'
+    set -f
+    set -- $state_parsed
+    set +f
+    IFS=$state_old_ifs
+
+    if [ "$#" -ne 5 ]; then
+        return 2
+    fi
+
+    ST_REPO_ROOT="$1"
+    ST_PYTHON_VERSION="$2"
+    ST_PYPROJECT_SHA256="$3"
+    ST_UV_LOCK_SHA256="$4"
+    ST_BOOTSTRAPPED_AT="$5"
+    return 0
+}
+
+write_state_atomically() {
+    write_root="$1"
+    write_state_dir="$write_root/$STATE_DIR_RELATIVE"
+    write_state_file="$write_state_dir/$STATE_FILE_NAME"
+    write_tmp_file="$write_state_dir/$STATE_FILE_NAME.tmp.$$"
+
+    if ! mkdir -p -- "$write_state_dir" 2>/dev/null; then
+        fail WORKSPACE_STATE_WRITE_FAILED \
+            "Could not create state directory: $write_state_dir"
+    fi
+
+    write_timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+    if ! (
+        umask 077
+        "$write_root/.venv/bin/python" -B -c '
+import json
+import sys
+
+output_path = sys.argv[1]
+document = {
     "format_version": 1,
     "repo_root": sys.argv[2],
     "python_version": sys.argv[3],
     "pyproject_sha256": sys.argv[4],
     "uv_lock_sha256": sys.argv[5],
+    "bootstrapped_at": sys.argv[6],
 }
-try:
-    raw = path.read_bytes().decode("utf-8")
-    data = json.loads(raw)
-except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-    raise SystemExit(1)
-if not isinstance(data, dict):
-    raise SystemExit(1)
-if set(data) != set(expected) | {"bootstrapped_at"}:
-    raise SystemExit(1)
-if not isinstance(data.get("bootstrapped_at"), str) or not data["bootstrapped_at"]:
-    raise SystemExit(1)
-for key, value in expected.items():
-    if data.get(key) != value:
-        raise SystemExit(1)
-PY
+with open(output_path, "w", encoding="utf-8") as output_file:
+    json.dump(document, output_file, indent=2, sort_keys=True)
+    output_file.write("\n")
+' "$write_tmp_file" "$FP_REPO_ROOT" "$FP_PYTHON_VERSION" "$FP_PYPROJECT_SHA256" "$FP_UV_LOCK_SHA256" "$write_timestamp"
+    ) 2>/dev/null; then
+        rm -f -- "$write_tmp_file" 2>/dev/null
+        fail WORKSPACE_STATE_WRITE_FAILED \
+            "Could not write temporary state file: $write_tmp_file"
+    fi
+
+    if [ ! -s "$write_tmp_file" ]; then
+        rm -f -- "$write_tmp_file" 2>/dev/null
+        fail WORKSPACE_STATE_WRITE_FAILED \
+            "Temporary state file is empty or missing after write: $write_tmp_file"
+    fi
+
+    if ! parse_state_file "$write_tmp_file" "$write_root/.venv/bin/python" >/dev/null 2>&1; then
+        rm -f -- "$write_tmp_file" 2>/dev/null
+        fail WORKSPACE_STATE_WRITE_FAILED \
+            "Newly written temporary state file failed validation: $write_tmp_file"
+    fi
+
+    if ! mv -f -- "$write_tmp_file" "$write_state_file" 2>/dev/null; then
+        rm -f -- "$write_tmp_file" 2>/dev/null
+        fail WORKSPACE_STATE_WRITE_FAILED \
+            "Could not atomically replace state file: $write_state_file"
+    fi
 }
 
-write_state() {
-    bootstrapped_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-    .venv/bin/python -B - "$STATE_DIR" "$STATE_FILE" "$ROOT" "$PYTHON_VERSION" "$PYPROJECT_SHA" "$UVLOCK_SHA" "$bootstrapped_at" <<'PY'
-import json
-import os
-import pathlib
-import sys
-import tempfile
+verify_lock() {
+    lock_root="$1"
 
-state_dir = pathlib.Path(sys.argv[1])
-state_file = pathlib.Path(sys.argv[2])
-state_dir.mkdir(parents=True, exist_ok=True)
-data = {
-    "format_version": 1,
-    "repo_root": sys.argv[3],
-    "python_version": sys.argv[4],
-    "pyproject_sha256": sys.argv[5],
-    "uv_lock_sha256": sys.argv[6],
-    "bootstrapped_at": sys.argv[7],
-}
-fd, tmp_name = tempfile.mkstemp(prefix="bootstrap-state-", suffix=".tmp", dir=state_dir)
-try:
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        json.dump(data, handle, indent=2, sort_keys=True)
-        handle.write("\n")
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.replace(tmp_name, state_file)
-finally:
-    try:
-        os.unlink(tmp_name)
-    except FileNotFoundError:
-        pass
-PY
+    if ! lock_check_output=$(cd "$lock_root" && uv lock --check 2>&1); then
+        fail WORKSPACE_LOCK_INCONSISTENT \
+            "uv lock --check failed in $lock_root; uv.lock is not consistent with pyproject.toml." \
+            "$lock_check_output"
+    fi
 }
 
-check_ready() {
-    compute_values
-    state_matches || \
-        fail WORKSPACE_STATE_STALE "Bootstrap fingerprint does not match this worktree/root/Python/pyproject.toml/uv.lock. Run ./scripts/bootstrap-workspace."
-    verify_python_binding || \
-        fail WORKSPACE_VENV_NOT_READY "The recorded environment is no longer bound to this worktree."
-}
+sync_env() {
+    sync_root="$1"
 
-if [ "$MODE" = check ]; then
-    # Do not create the lock file in check mode. If the mutating path has created it,
-    # a shared lock ensures the check does not race an active repair.
-    if [ -f "$LOCK_FILE" ]; then
-        if ! flock -s -w 5 "$LOCK_FILE" sh -c ':'; then
-            fail WORKSPACE_BOOTSTRAP_BUSY "A workspace bootstrap mutation is in progress."
+    if [ -n "$UV_SYNC_EXTRA" ]; then
+        if ! sync_output=$(cd "$sync_root" && uv sync --locked --extra "$UV_SYNC_EXTRA" 2>&1); then
+            fail WORKSPACE_SYNC_FAILED \
+                "uv sync --locked --extra $UV_SYNC_EXTRA failed in $sync_root." \
+                "$sync_output"
+        fi
+    else
+        if ! sync_output=$(cd "$sync_root" && uv sync --locked 2>&1); then
+            fail WORKSPACE_SYNC_FAILED \
+                "uv sync --locked failed in $sync_root." \
+                "$sync_output"
         fi
     fi
-    check_ready
-    printf '%s\n' "WORKSPACE_READY"
-    exit 0
-fi
+}
 
-mkdir -p "$STATE_DIR"
-# Serialize mutating bootstrap operations per worktree. A bounded wait fails closed
-# instead of letting concurrent uv sync operations race over the same .venv.
-exec 9>"$LOCK_FILE"
-if ! flock -x -w 30 9; then
-    fail WORKSPACE_BOOTSTRAP_BUSY "Could not acquire the per-worktree bootstrap lock."
-fi
+verify_python_version() {
+    version_root="$1"
+    version_python_bin="$version_root/.venv/bin/python"
 
-# Fast path: an unchanged, live, correctly bound environment needs no sync.
-if [ -x .venv/bin/python ]; then
-    compute_values
-    if state_matches && verify_python_binding; then
-        printf '%s\n' "WORKSPACE_READY"
+    if [ ! -x "$version_python_bin" ]; then
+        fail WORKSPACE_VENV_MISSING \
+            "Expected interpreter not found or not executable: $version_python_bin"
+    fi
+
+    if ! version_check_output=$("$version_python_bin" -B -c '
+import sys
+import tomllib
+from packaging.specifiers import SpecifierSet
+
+pyproject_path = sys.argv[1]
+with open(pyproject_path, "rb") as pyproject_file:
+    data = tomllib.load(pyproject_file)
+specifier = SpecifierSet(data["project"]["requires-python"])
+current_version = "{0}.{1}.{2}".format(*sys.version_info[:3])
+if not specifier.contains(current_version):
+    print(
+        "Interpreter version {0} does not satisfy requires-python {1!r}".format(
+            current_version, str(specifier)
+        )
+    )
+    sys.exit(1)
+' "$version_root/pyproject.toml" 2>&1); then
+        fail WORKSPACE_PYTHON_VERSION_INVALID \
+            "requires-python check failed for $version_python_bin." \
+            "$version_check_output"
+    fi
+}
+
+verify_source_binding() {
+    binding_root="$1"
+    binding_python_bin="$binding_root/.venv/bin/python"
+    binding_expected_dir="$binding_root/$SOURCE_PATH_RELATIVE"
+
+    if ! binding_resolved=$("$binding_python_bin" -B -c '
+import importlib
+from pathlib import Path
+import sys
+
+module = importlib.import_module(sys.argv[1])
+module_file = getattr(module, "__file__", None)
+if not module_file:
+    raise SystemExit("module has no __file__")
+print(Path(module_file).resolve())
+' "$SOURCE_IMPORT_NAME" 2>&1); then
+        fail WORKSPACE_SOURCE_BINDING_FAILED \
+            "Could not import $SOURCE_IMPORT_NAME using $binding_python_bin." \
+            "$binding_resolved"
+    fi
+
+    if ! binding_expected_resolved=$(realpath -- "$binding_expected_dir" 2>/dev/null); then
+        fail WORKSPACE_SOURCE_BINDING_FAILED \
+            "Expected source path could not be resolved: $binding_expected_dir"
+    fi
+
+    if ! is_component_descendant "$binding_resolved" "$binding_expected_resolved"; then
+        fail WORKSPACE_SOURCE_BINDING_FAILED \
+            "$SOURCE_IMPORT_NAME resolved to $binding_resolved, which is not under this worktree's expected source path ($binding_expected_resolved)." \
+            "PYTHONPATH manipulation is never used to work around this; re-sync this worktree's own environment instead."
+    fi
+}
+
+verify_required_imports() {
+    imports_root="$1"
+    imports_python_bin="$imports_root/.venv/bin/python"
+
+    for required_import in $REQUIRED_IMPORTS; do
+        if ! import_check_output=$("$imports_python_bin" -B -c '
+import importlib
+import sys
+importlib.import_module(sys.argv[1])
+' "$required_import" 2>&1); then
+            fail WORKSPACE_REQUIRED_IMPORT_FAILED \
+                "Could not import $required_import using $imports_python_bin." \
+                "$import_check_output"
+        fi
+    done
+}
+
+check_lock_component_not_foreign() {
+    lockmeta_component_path="$1"
+    lockmeta_root="$2"
+
+    if [ ! -e "$lockmeta_component_path" ] && [ ! -L "$lockmeta_component_path" ]; then
+        return 0
+    fi
+
+    if [ -L "$lockmeta_component_path" ]; then
+        if lockmeta_resolved=$(realpath -- "$lockmeta_component_path" 2>/dev/null); then
+            fail WORKSPACE_LOCK_METADATA_FOREIGN \
+                "$lockmeta_component_path is a symlink to $lockmeta_resolved; lock metadata must belong to this worktree."
+        fi
+        fail WORKSPACE_LOCK_METADATA_FOREIGN \
+            "$lockmeta_component_path is a symlink whose target could not be resolved."
+    fi
+
+    if ! lockmeta_resolved=$(realpath -- "$lockmeta_component_path" 2>/dev/null); then
+        fail WORKSPACE_LOCK_METADATA_FOREIGN \
+            "$lockmeta_component_path could not be resolved via realpath."
+    fi
+
+    if ! is_component_descendant "$lockmeta_resolved" "$lockmeta_root"; then
+        fail WORKSPACE_LOCK_METADATA_FOREIGN \
+            "$lockmeta_component_path resolves to $lockmeta_resolved, which is not under this worktree's root ($lockmeta_root)."
+    fi
+}
+
+verify_lock_metadata_not_foreign() {
+    lockmeta_check_root="$1"
+
+    check_lock_component_not_foreign \
+        "$lockmeta_check_root/$LOCK_METADATA_LOCAL_DIR_RELATIVE" \
+        "$lockmeta_check_root"
+    check_lock_component_not_foreign \
+        "$lockmeta_check_root/$STATE_DIR_RELATIVE" \
+        "$lockmeta_check_root"
+    check_lock_component_not_foreign \
+        "$lockmeta_check_root/$STATE_DIR_RELATIVE/$LOCK_FILE_NAME" \
+        "$lockmeta_check_root"
+}
+
+with_exclusive_lock() {
+    lock_root="$1"
+    lock_state_dir="$lock_root/$STATE_DIR_RELATIVE"
+    lock_file="$lock_state_dir/$LOCK_FILE_NAME"
+
+    if ! mkdir -p -- "$lock_state_dir" 2>/dev/null; then
+        fail WORKSPACE_STATE_DIR_UNAVAILABLE \
+            "Could not create state directory: $lock_state_dir"
+    fi
+
+    exec 8>&2 2>/dev/null
+    if command exec 9<>"$lock_file"; then
+        lock_open_status=0
+    else
+        lock_open_status=1
+    fi
+    exec 2>&8 8>&-
+
+    if [ "$lock_open_status" -ne 0 ]; then
+        fail WORKSPACE_STATE_DIR_UNAVAILABLE \
+            "Could not open or create lock file: $lock_file"
+    fi
+
+    if ! flock -x -w "$LOCK_ACQUIRE_TIMEOUT_SECONDS" 9; then
+        fail WORKSPACE_LOCK_CONTENTION \
+            "Could not acquire the exclusive per-worktree lock within ${LOCK_ACQUIRE_TIMEOUT_SECONDS}s: $lock_file" \
+            "Another bootstrap-workspace invocation is likely still mutating this worktree's environment."
+    fi
+}
+
+with_shared_lock() {
+    shared_lock_root="$1"
+    shared_lock_file="$shared_lock_root/$STATE_DIR_RELATIVE/$LOCK_FILE_NAME"
+
+    exec 8>&2 2>/dev/null
+    if command exec 9<"$shared_lock_file"; then
+        shared_lock_open_status=0
+    else
+        shared_lock_open_status=1
+    fi
+    exec 2>&8 8>&-
+
+    if [ "$shared_lock_open_status" -ne 0 ]; then
+        fail WORKSPACE_BOOTSTRAP_STATE_MISSING \
+            "Could not open the existing lock file: $shared_lock_file"
+    fi
+
+    if ! flock -s -w "$LOCK_ACQUIRE_TIMEOUT_SECONDS" 9; then
+        fail WORKSPACE_LOCK_CONTENTION \
+            "Could not acquire the shared per-worktree lock within ${LOCK_ACQUIRE_TIMEOUT_SECONDS}s: $shared_lock_file" \
+            "A mutating bootstrap-workspace invocation is likely in progress against this worktree's environment."
+    fi
+}
+
+attempt_fast_path() {
+    fast_root="$1"
+
+    if [ ! -x "$fast_root/.venv/bin/python" ]; then
+        return 1
+    fi
+
+    if ! read_state "$fast_root"; then
+        return 1
+    fi
+
+    compute_fingerprint "$fast_root"
+
+    if [ "$ST_REPO_ROOT" != "$FP_REPO_ROOT" ] ||
+        [ "$ST_PYTHON_VERSION" != "$FP_PYTHON_VERSION" ] ||
+        [ "$ST_PYPROJECT_SHA256" != "$FP_PYPROJECT_SHA256" ] ||
+        [ "$ST_UV_LOCK_SHA256" != "$FP_UV_LOCK_SHA256" ]; then
+        return 1
+    fi
+
+    if (
+        verify_lock "$fast_root" &&
+            verify_python_version "$fast_root" &&
+            verify_source_binding "$fast_root" &&
+            verify_required_imports "$fast_root"
+    ) >/dev/null 2>/dev/null; then
+        return 0
+    fi
+
+    return 1
+}
+
+run_mutating() {
+    mutating_root="$1"
+
+    with_exclusive_lock "$mutating_root"
+
+    if attempt_fast_path "$mutating_root"; then
+        printf 'READY\n'
         exit 0
     fi
-fi
 
-if ! sync_output=$(uv sync --locked 2>&1); then
-    fail WORKSPACE_SYNC_FAILED "uv sync --locked failed." "$sync_output"
-fi
+    verify_lock "$mutating_root"
+    sync_env "$mutating_root"
+    verify_python_version "$mutating_root"
+    verify_source_binding "$mutating_root"
+    verify_required_imports "$mutating_root"
 
-compute_values
-write_state
-check_ready
-printf '%s\n' "WORKSPACE_READY"
+    compute_fingerprint "$mutating_root"
+    write_state_atomically "$mutating_root"
+
+    printf 'READY\n'
+}
+
+run_check() {
+    check_root="$1"
+    check_python_bin="$check_root/.venv/bin/python"
+
+    if [ ! -x "$check_python_bin" ]; then
+        fail WORKSPACE_VENV_MISSING \
+            "Expected interpreter not found or not executable: $check_python_bin"
+    fi
+
+    check_state_dir="$check_root/$STATE_DIR_RELATIVE"
+    check_lock_file="$check_state_dir/$LOCK_FILE_NAME"
+    check_state_file="$check_state_dir/$STATE_FILE_NAME"
+
+    if [ ! -d "$check_state_dir" ] || [ ! -f "$check_lock_file" ] || [ ! -e "$check_state_file" ]; then
+        fail WORKSPACE_BOOTSTRAP_STATE_MISSING \
+            "Bootstrap metadata not found under $check_state_dir (expected both $check_lock_file and $check_state_file)."
+    fi
+
+    with_shared_lock "$check_root"
+
+    if read_state "$check_root"; then
+        :
+    elif [ "$?" -eq 1 ]; then
+        fail WORKSPACE_BOOTSTRAP_STATE_MISSING \
+            "Bootstrap-state file not found under $check_state_dir."
+    else
+        fail WORKSPACE_BOOTSTRAP_STATE_INVALID \
+            "Bootstrap-state file under $check_state_dir failed strict validation."
+    fi
+
+    compute_fingerprint "$check_root"
+
+    if [ "$ST_REPO_ROOT" != "$FP_REPO_ROOT" ] ||
+        [ "$ST_PYTHON_VERSION" != "$FP_PYTHON_VERSION" ] ||
+        [ "$ST_PYPROJECT_SHA256" != "$FP_PYPROJECT_SHA256" ] ||
+        [ "$ST_UV_LOCK_SHA256" != "$FP_UV_LOCK_SHA256" ]; then
+        fail WORKSPACE_ENVIRONMENT_STALE \
+            "Recorded bootstrap state no longer matches the current worktree (pyproject.toml/uv.lock content, resolved root, or Python version changed)."
+    fi
+
+    verify_lock "$check_root"
+    verify_python_version "$check_root"
+    verify_source_binding "$check_root"
+    verify_required_imports "$check_root"
+
+    printf 'READY\n'
+}
+
+main() {
+    check_mode=0
+
+    if [ "$#" -eq 0 ]; then
+        check_mode=0
+    elif [ "$#" -eq 1 ] && [ "$1" = "--check" ]; then
+        check_mode=1
+    else
+        printf 'Usage: %s [--check]\n' "$SELF_NAME" >&2
+        printf '  (no arguments)  mutating: establish/repair READY\n' >&2
+        printf '  --check         non-mutating: verify READY only\n' >&2
+        exit 64
+    fi
+
+    if [ "$check_mode" -eq 1 ]; then
+        FAIL_EXIT_CODE=2
+    fi
+
+    check_tooling
+
+    if ! resolve_root; then
+        fail WORKSPACE_NOT_A_GIT_REPO \
+            "The current directory is not inside a Git working tree (git rev-parse --show-toplevel failed)."
+    fi
+    root="$ROOT"
+
+    verify_configuration
+    verify_identity "$root"
+    verify_venv_not_foreign "$root"
+    verify_venv_not_bind_mounted "$root"
+    verify_lock_metadata_not_foreign "$root"
+
+    if [ "$check_mode" -eq 1 ]; then
+        run_check "$root"
+    else
+        run_mutating "$root"
+    fi
+}
+
+main "$@"
