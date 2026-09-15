@@ -26,14 +26,20 @@ stable reference is sufficient.
 
 English remains authoritative for repository/GitHub artifacts.
 
-A human-facing document that is expected to be used routinely for setup or development
-operations may have a Japanese reference translation. When such a paired document is
-designated by the repository:
+Human-facing documents used directly for setup or recurring development operation may
+have Japanese reference translations. This repository designates these maintained pairs:
+
+- `README.md` / `README.ja.md`;
+- `docs/setup.md` / `docs/setup.ja.md`;
+- `docs/development-operations-runbook.md` /
+  `docs/development-operations-runbook.ja.md`.
+
+For every designated pair:
 
 - keep the English version authoritative;
 - update both languages in the same change when meaning changes;
-- keep headings, procedure order, warnings, and operational boundaries semantically
-  synchronized;
+- keep headings, procedure order, warnings, document ownership, and operational
+  boundaries semantically synchronized;
 - do not let the Japanese reference independently redefine policy.
 
 AI-facing policy, steering, and Spec templates remain English unless the adopting
