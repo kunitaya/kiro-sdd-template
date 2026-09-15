@@ -1,5 +1,7 @@
 # Setup and Customization
 
+English (authoritative) | [日本語](setup.ja.md)
+
 This document covers **adoption-time customization** of the template. It does not own
 daily development operation.
 
