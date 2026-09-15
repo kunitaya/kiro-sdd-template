@@ -66,13 +66,13 @@ Independent Code / Requirements Review
 - Kiro nativeのartifact/task lifecycleを独自の簡易形式に置き換えない。
 - タスクプロンプトにはタスク固有情報を載せ、リポジトリ共通方針を重複させない。
 - worktreeはroot/branch/repository identityを実行時に確認して分離する。
-- workspace READYは「Pythonが存在する」ではなく、現在のworktree/runtime/dependency状態が記録された
-  bootstrap fingerprintと一致することを意味する。
+- workspace READYは「Pythonが存在する」ではなく、現在のworktree/runtime/dependency/bootstrap設定が
+  記録済みfingerprintと一致することを意味する。
 - lint/validationでは既に用意されたツールを使い、パッケージ取得runnerで代用しない。
 - 検証証拠はリスクに応じて取得し、無意味に何度も再実行しない。
 - 自動レビューは補助証拠であり、権威や独立レビューの代替ではない。
 - BLOCKINGだけを必須修正ラウンドとする。
-- 最終deliveryはreview evidence、PR/branch状態、完了checkbox、clean reviewed HEAD、Git safety controlを
+- 最終deliveryはreview evidence、PR/branch状態、完了checkpoint、review済みstate、Git safety controlを
   確認してからarchive/Readyへ進む。
 - mergeは明示的委任がない限り人の判断とする。
 
@@ -85,7 +85,7 @@ Independent Code / Requirements Review
 - sync前の`uv.lock`整合性。
 - symlinkまたは別mountされた`.venv`の拒否。
 - `.venv` interpreterが現在worktreeに属すること。
-- 物理repository root、Python version、`pyproject.toml`、`uv.lock`を含むstate fingerprint。
+- 物理repository root、Python version、`pyproject.toml`、`uv.lock`、bootstrap script/configurationを含むstate fingerprint。
 - mutating bootstrapの直列化。
 - Kiro readiness hookから使う非変更・fail-closedな`--check`。
 
@@ -116,15 +116,17 @@ lifecycleなど高リスク領域では必要なstructural/adversarial matrixを
 
 `scripts/finalize-spec`はfail-closedです。レビューPASSを自分で判断しません。呼び出し側が独立レビュー済みのfull commit SHAと具体的なPASS記録URLを渡します。archive前に少なくとも以下を確認します。
 
-- working tree/indexがcleanで、HEADがレビュー済みcommitと完全一致する。
+- working tree/indexとHEADが、review済みまたは認識済みの機械的delivery stateに一致する。
 - repository Git hooksが設定され、実行可能である。
-- open Draft PRのhead/baseが現在branchと`main`に一致する。
-- remote PR HEADがレビュー済みcommitと一致する。
+- owning PRが同一repositoryのPRで、head/baseが現在branchと`main`に一致する。
+- remote PR HEADが明示的に許可されたdelivery stateに属する。
 - 必要なSpec artifactが揃っている。
-- 最後の2つの機械的checkpoint以外のtask/review checkboxが完了している。
-- archive destinationがまだ存在しない。
+- final review/finalize marker以外のtask/review checkpointが完了している。
+- ローカル/リモートのtreeが認識外の状態になっていない。
 
-その後にだけ、最後の2 checkpointを記録し、PASS参照を保存し、Specをarchiveし、機械的変更をcommit/pushし、同じDraft PRをReadyへ遷移します。mergeは手動のままです。
+Deliveryは意図的に二段階です。まずreview済みSpecにfinal-review結果を記録し、そのSpecをarchiveして、PRがDraftのまま最初の
+機械的commit/pushを行います。次に同じPRをReadyへ遷移させ、その成功を確認します。Ready確認後にだけfinal delivery完了記録を
+書き込み、2つ目の機械的commit/pushを行います。認識済みpartial stateからは安全に再開できます。mergeは手動のままです。
 
 ## 導入
 
