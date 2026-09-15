@@ -1,0 +1,784 @@
+# Workspace-scoped Kiro permissions template.
+#
+# Copy/adapt this template into the current workspace trust directory:
+#   ~/.kiro/workspace-roots/<hash>/permissions.yaml
+# Kiro stores workspace permissions outside the repository so a clone cannot
+# grant itself trust. Keep this repository copy as a reviewed template only.
+#
+# Project-specific paths, package/import names, runtime versions, test-only
+# environment variables, and domain documentation hosts are intentionally absent.
+
+rules:
+  - capability: fs_read
+    effect: deny
+    match:
+      - .env
+      - .env.*
+      - "**/.env"
+      - "**/.env.*"
+      - secrets/**
+      - "**/secrets/**"
+      - "**/*.pem"
+      - "**/*.key"
+      - "**/*.p12"
+      - "**/*.pfx"
+      - "**/id_rsa"
+      - "**/id_ed25519"
+  - capability: fs_read
+    effect: allow
+    match:
+      - "**"
+  - capability: fs_write
+    effect: deny
+    match:
+      - .env
+      - .env.*
+      - "**/.env"
+      - "**/.env.*"
+      - secrets/**
+      - "**/secrets/**"
+      - "**/*.pem"
+      - "**/*.key"
+      - "**/*.p12"
+      - "**/*.pfx"
+      - "**/id_rsa"
+      - "**/id_ed25519"
+  - capability: fs_write
+    effect: ask
+    match:
+      - AGENTS.md
+      - .gitignore
+      - .githooks/**
+      - .github/**
+      - .kiro/steering/**
+      - .kiro/skills/**
+      - .kiro/agents/**
+      - .kiro/hooks/**
+      - .kiroignore
+      - templates/permissions.yaml
+      - config.yaml
+      - pyproject.toml
+      - requirements*.txt
+      - uv.lock
+      - poetry.lock
+      - output/**
+      - "**/*.sqlite"
+      - "**/*.sqlite3"
+      - "**/*.db"
+  - capability: fs_write
+    effect: allow
+    match:
+      - src/**
+      - tests/**
+      - docs/**
+      - scripts/**
+      - .kiro/specs/**
+      - .local/kiro-scratch/**
+      - README.md
+      - README.ja.md
+      - CHANGELOG.md
+  - capability: shell
+    effect: deny
+    match:
+      - rm*
+      - rmdir*
+      - unlink*
+      - shred*
+      - Remove-Item*
+      - del *
+      - erase *
+      - rd *
+      - find *-delete*
+    exclude:
+      - rm .local/kiro-scratch/*
+      - rm -f .local/kiro-scratch/*
+      - rm -r .local/kiro-scratch/*
+      - rm -rf .local/kiro-scratch/*
+      - rmdir .local/kiro-scratch/*
+      - Remove-Item .local/kiro-scratch/*
+      - Remove-Item -Recurse .local/kiro-scratch/*
+  - capability: shell
+    effect: ask
+    match:
+      - rm .local/kiro-scratch/*
+      - rm -f .local/kiro-scratch/*
+      - rm -r .local/kiro-scratch/*
+      - rm -rf .local/kiro-scratch/*
+      - rmdir .local/kiro-scratch/*
+      - Remove-Item .local/kiro-scratch/*
+      - Remove-Item -Recurse .local/kiro-scratch/*
+  - capability: shell
+    effect: deny
+    match:
+      - sudo*
+      - doas*
+      - su *
+      - dd *
+      - mkfs*
+      - format *
+  - capability: shell
+    effect: deny
+    match:
+      - git restore *--worktree*
+  - capability: shell
+    effect: deny
+    match:
+      - git reset*
+      - git clean*
+      - git restore*
+      - git checkout -- *
+      - git checkout * -- *
+      - git checkout -f*
+      - git checkout --force*
+      - git stash drop*
+      - git stash clear*
+      - git switch -f*
+      - git switch --force*
+      - git switch --discard-changes*
+      - git rm*
+      - git branch -f*
+      - git branch --force*
+      - git filter-repo*
+      - git filter-branch*
+    exclude:
+      - git reset -- *
+      - git reset HEAD -- *
+      - git restore --staged *
+  - capability: shell
+    effect: deny
+    match:
+      - git push -f*
+      - git push --force*
+      - git push * --force*
+      - git push * -f*
+      - git push --delete*
+      - git push * --delete*
+      - git push * :*
+      - git push --no-verify*
+      - git push * --no-verify*
+      - git push * +*
+      - git push --mirror*
+      - git push * --mirror*
+      - git push --prune*
+      - git push * --prune*
+      - git commit --no-verify*
+      - git commit * --no-verify*
+      - git commit -n*
+      - git commit * -n*
+      - git -c *core.hooksPath*
+      - gh repo delete*
+      - gh issue delete*
+      - gh release delete*
+      - gh run delete*
+      - gh auth token*
+  - capability: shell
+    effect: deny
+    match:
+      - git add .
+      - git add -A*
+      - git add --all*
+      - git add -- .
+      - git add :/*
+  - capability: shell
+    effect: ask
+    match:
+      - git push origin main*
+      - git push origin master*
+      - git push origin release/*
+      - git push * main*
+      - git push * master*
+      - git push * release/*
+      - git push * refs/heads/main*
+      - git push * refs/heads/master*
+      - git push * refs/heads/release/*
+      - git push *:main*
+      - git push *:master*
+      - git push *:refs/heads/main*
+      - git push *:refs/heads/master*
+      - git push *:release/*
+      - git push *:refs/heads/release/*
+      - git push * HEAD*
+      - git push * @*
+      - git push --all*
+      - git push * --all*
+      - git push --tags*
+      - git push * --tags*
+      - git push --follow-tags*
+      - git push * --follow-tags*
+      - git fetch *:*
+      - git fetch *--prune-tags*
+      - git fetch *--force*
+      - git fetch *--update-head-ok*
+      - markdownlint *--fix*
+      - markdownlint-cli2 *--fix*
+      - npx *markdownlint*--fix*
+      - mypy *--install-types*
+      - .venv/bin/mypy *--install-types*
+      - .venv/bin/python -m mypy *--install-types*
+      - .venv/bin/python3 -m mypy *--install-types*
+      - mypy *--cache-dir*
+      - .venv/bin/mypy *--cache-dir*
+      - .venv/bin/python -m mypy *--cache-dir*
+      - .venv/bin/python3 -m mypy *--cache-dir*
+      - mypy *--*-report*
+      - .venv/bin/mypy *--*-report*
+      - .venv/bin/python -m mypy *--*-report*
+      - .venv/bin/python3 -m mypy *--*-report*
+      - mypy *--junit-xml*
+      - .venv/bin/mypy *--junit-xml*
+      - .venv/bin/python -m mypy *--junit-xml*
+      - .venv/bin/python3 -m mypy *--junit-xml*
+      - git commit *--amend*
+      - git rebase*
+      - git merge*
+      - git cherry-pick*
+      - git revert*
+      - git branch -d*
+      - git branch -D*
+      - git branch --delete*
+      - git switch -C*
+      - git switch --force-create*
+      - git switch --orphan*
+      - git switch -m*
+      - git switch --merge*
+      - git switch --ignore-other-worktrees*
+      - git checkout*
+      - git config *
+      - gh auth login*
+      - gh auth logout*
+      - gh auth refresh*
+      - gh auth setup-git*
+      - gh secret set*
+      - gh secret delete*
+      - gh variable set*
+      - gh variable delete*
+      - gh workflow enable*
+      - gh workflow disable*
+      - gh workflow run*
+      - gh run cancel*
+      - gh run rerun*
+      - gh pr merge*
+      - gh api graphql *mutation*
+      - gh api graphql *--input*
+      - gh api graphql *--method*
+      - gh api graphql -X *
+      - gh api graphql * -X *
+      - gh api graphql -F *
+      - gh api graphql * -F *
+      - gh api graphql *--field*
+      - gh api repos/*/*/* --input*
+      - gh api repos/*/*/* --method*
+      - gh api repos/*/*/* -X *
+      - gh api repos/*/*/* -f *
+      - gh api repos/*/*/* --raw-field *
+      - gh api repos/*/*/* -F *
+      - gh api repos/*/*/* --field *
+      - gh api repos/*/*/* --hostname*
+      - gh issue create*
+      - gh repo edit*
+      - pip install*
+      - pip3 install*
+      - .venv/bin/pip install*
+      - python -m pip install*
+      - python3 -m pip install*
+      - uv add*
+      - uv remove*
+      - uv pip install*
+      - npm install*
+      - npm uninstall*
+      - npm update*
+      - npx --yes*
+      - apt *
+      - apt-get *
+      - dnf *
+      - yum *
+      - timeout * * pytest
+      - timeout * * pytest *
+      - timeout * * .venv/bin/pytest
+      - timeout * * .venv/bin/pytest *
+      - timeout * * .venv/bin/python -m pytest
+      - timeout * * .venv/bin/python -m pytest *
+      - kill *
+      - pkill *
+      - killall *
+      - Stop-Process *
+      - find *-exec*
+      - find *-execdir*
+      - find *-ok*
+      - find *-okdir*
+      - find *-fprint*
+      - find *-fprintf*
+      - find *-fls*
+      - mv *
+      - cp *
+      - Move-Item *
+      - Copy-Item *
+      - chmod *
+      - chown *
+      - awk *
+      - sed -i *
+      - sed -i.* *
+      - sed * -i *
+      - sed * -i.* *
+      - sed --in-place *
+      - sed --in-place=* *
+      - sed * --in-place *
+      - sed * --in-place=* *
+      - xxd -r*
+      - xxd * -r*
+      - touch .local/kiro-scratch/* *
+      - man -*
+      - man * -*
+      - man */*
+    exclude:
+      - git config --get*
+      - git config --list*
+      - git config -l*
+      - git config core.hooksPath
+      - git config core.hooksPath .githooks
+      - git checkout main
+      - git merge-base*
+      - apt list --installed
+      - awk --sandbox *
+      - awk -S *
+      - gh api repos/*/*/pulls/*/requested_reviewers -X POST -f "reviewers[]=copilot-pull-request-reviewer[bot]"
+      - 'gh api graphql -f query="mutation { resolveReviewThread(input: {threadId: \"$tid\"}) { thread { id isResolved } } }"'
+  - capability: shell
+    effect: ask
+    match:
+      - ruff format*
+      - .venv/bin/ruff format*
+      - .venv/bin/python -m ruff format*
+      - .venv/bin/python3 -m ruff format*
+      - ruff check *--fix*
+      - .venv/bin/ruff check *--fix*
+      - .venv/bin/python -m ruff check *--fix*
+      - .venv/bin/python3 -m ruff check *--fix*
+      - ruff check *--unsafe-fixes*
+      - .venv/bin/ruff check *--unsafe-fixes*
+      - .venv/bin/python -m ruff check *--unsafe-fixes*
+      - .venv/bin/python3 -m ruff check *--unsafe-fixes*
+      - ruff check *--output-file*
+      - .venv/bin/ruff check *--output-file*
+      - .venv/bin/python -m ruff check *--output-file*
+      - .venv/bin/python3 -m ruff check *--output-file*
+      - ruff check * -o *
+      - .venv/bin/ruff check * -o *
+      - .venv/bin/python -m ruff check * -o *
+      - .venv/bin/python3 -m ruff check * -o *
+    exclude:
+      - ruff check --fix --no-unsafe-fixes src/
+      - ruff check --fix --no-unsafe-fixes tests/
+      - ruff check --fix --no-unsafe-fixes src/ tests/
+      - .venv/bin/ruff check --fix --no-unsafe-fixes src/
+      - .venv/bin/ruff check --fix --no-unsafe-fixes tests/
+      - .venv/bin/ruff check --fix --no-unsafe-fixes src/ tests/
+      - .venv/bin/python -m ruff check --fix --no-unsafe-fixes src/
+      - .venv/bin/python -m ruff check --fix --no-unsafe-fixes tests/
+      - .venv/bin/python -m ruff check --fix --no-unsafe-fixes src/ tests/
+      - .venv/bin/python3 -m ruff check --fix --no-unsafe-fixes src/
+      - .venv/bin/python3 -m ruff check --fix --no-unsafe-fixes tests/
+      - .venv/bin/python3 -m ruff check --fix --no-unsafe-fixes src/ tests/
+      - ruff format src/
+      - ruff format tests/
+      - ruff format src/ tests/
+      - .venv/bin/ruff format src/
+      - .venv/bin/ruff format tests/
+      - .venv/bin/ruff format src/ tests/
+      - .venv/bin/python -m ruff format src/
+      - .venv/bin/python -m ruff format tests/
+      - .venv/bin/python -m ruff format src/ tests/
+      - .venv/bin/python3 -m ruff format src/
+      - .venv/bin/python3 -m ruff format tests/
+      - .venv/bin/python3 -m ruff format src/ tests/
+  - capability: shell
+    effect: allow
+    match:
+      - ruff check --fix --no-unsafe-fixes src/
+      - ruff check --fix --no-unsafe-fixes tests/
+      - ruff check --fix --no-unsafe-fixes src/ tests/
+      - .venv/bin/ruff check --fix --no-unsafe-fixes src/
+      - .venv/bin/ruff check --fix --no-unsafe-fixes tests/
+      - .venv/bin/ruff check --fix --no-unsafe-fixes src/ tests/
+      - .venv/bin/python -m ruff check --fix --no-unsafe-fixes src/
+      - .venv/bin/python -m ruff check --fix --no-unsafe-fixes tests/
+      - .venv/bin/python -m ruff check --fix --no-unsafe-fixes src/ tests/
+      - .venv/bin/python3 -m ruff check --fix --no-unsafe-fixes src/
+      - .venv/bin/python3 -m ruff check --fix --no-unsafe-fixes tests/
+      - .venv/bin/python3 -m ruff check --fix --no-unsafe-fixes src/ tests/
+      - ruff format src/
+      - ruff format tests/
+      - ruff format src/ tests/
+      - .venv/bin/ruff format src/
+      - .venv/bin/ruff format tests/
+      - .venv/bin/ruff format src/ tests/
+      - .venv/bin/python -m ruff format src/
+      - .venv/bin/python -m ruff format tests/
+      - .venv/bin/python -m ruff format src/ tests/
+      - .venv/bin/python3 -m ruff format src/
+      - .venv/bin/python3 -m ruff format tests/
+      - .venv/bin/python3 -m ruff format src/ tests/
+  - capability: shell
+    effect: ask
+    match:
+      - awk --sandbox *>*
+      - awk -S *>*
+      - gawk --sandbox *>*
+      - gawk -S *>*
+      - sed --sandbox *>*
+  - capability: shell
+    effect: allow
+    match:
+      - break
+      - jobs
+      - jobs -l
+      - pwd
+      - ls
+      - ls *
+      - dir
+      - dir *
+      - Get-ChildItem*
+      - Get-Item *
+      - Test-Path *
+      - cat *
+      - Get-Content *
+      - grep *
+      - rg
+      - rg *
+      - seq
+      - seq *
+      - head *
+      - tail *
+      - sort *
+      - cut *
+      - diff *
+      - Compare-Object *
+      - wc *
+      - tr *
+      - ps
+      - ps *
+      - pgrep *
+      - Get-Process*
+      - find
+      - find *
+      - set -e*
+      - set -o *
+      - source .venv/bin/activate
+      - . .venv/bin/activate
+      - sed -n *
+      - awk --sandbox *
+      - awk -S *
+      - gawk --sandbox *
+      - gawk -S *
+      - sed --sandbox *
+      - xxd
+      - xxd *
+      - file *
+      - stat *
+      - du
+      - du *
+      - sha256sum *
+      - shasum *
+      - Get-FileHash *
+      - apt list --installed
+      - man
+      - man *
+      - gh -h
+      - kiro -h
+      - kiro -v
+      - git -h
+      - git -v
+      - uv -h
+      - uv -V
+      - flock -h
+      - flock -V
+      - python -h
+      - python -V
+      - python3 -h
+      - python3 -V
+      - .venv/bin/python -h
+      - .venv/bin/python -V
+      - .venv/bin/python3 --help
+      - .venv/bin/python3 -h
+      - .venv/bin/python3 --version
+      - .venv/bin/python3 -V
+      - pip -h
+      - pip -V
+      - pip3 -h
+      - pip3 -V
+      - .venv/bin/pip -h
+      - .venv/bin/pip -V
+      - node -h
+      - node -v
+      - npm -h
+      - npm -v
+      - npx -h
+      - npx -v
+      - gh --help
+      - gh --version
+      - gh auth status
+      - kiro --help
+      - kiro --version
+      - git --help
+      - git --version
+      - uv --help
+      - uv --version
+      - flock --help
+      - flock --version
+      - python --help
+      - python --version
+      - python3 --help
+      - python3 --version
+      - .venv/bin/python --help
+      - .venv/bin/python --version
+      - pip --help
+      - pip --version
+      - pip3 --help
+      - pip3 --version
+      - .venv/bin/pip --help
+      - .venv/bin/pip --version
+      - pytest --help
+      - pytest --version
+      - .venv/bin/pytest --help
+      - .venv/bin/pytest --version
+      - ruff --help
+      - ruff --version
+      - .venv/bin/ruff --help
+      - .venv/bin/ruff --version
+      - .venv/bin/python -m ruff --help
+      - .venv/bin/python -m ruff --version
+      - .venv/bin/python3 -m ruff --help
+      - .venv/bin/python3 -m ruff --version
+      - mypy --help
+      - mypy --version
+      - .venv/bin/mypy --help
+      - .venv/bin/mypy --version
+      - .venv/bin/python -m mypy --help
+      - .venv/bin/python -m mypy --version
+      - .venv/bin/python3 -m mypy --help
+      - .venv/bin/python3 -m mypy --version
+      - markdownlint --help
+      - markdownlint --version
+      - markdownlint-cli2 --help
+      - markdownlint-cli2 --version
+      - node --help
+      - node --version
+      - npm --help
+      - npm --version
+      - npx --help
+      - npx --version
+      - bash --help
+      - bash --version
+      - gh ruleset --help
+      - uv lock --check
+      - time uv lock --check
+      - uv sync --locked --frozen
+      - ./scripts/bootstrap-workspace
+      - ./scripts/bootstrap-workspace --check
+      - 'echo "EXIT=$?"'
+      - 'echo "CHECK_EXIT=$?"'
+      - './scripts/bootstrap-workspace; echo "EXIT=$?"'
+      - './scripts/bootstrap-workspace --check; echo "CHECK_EXIT=$?"'
+      - timeout 300 ./scripts/bootstrap-workspace
+      - timeout 300 ./scripts/bootstrap-workspace --check
+  - capability: shell
+    effect: allow
+    match:
+      - mkdir -p docs/spec-archive
+      - mkdir --parents docs/spec-archive
+      - mkdir -p .local/kiro-scratch
+      - mkdir --parents .local/kiro-scratch
+      - mkdir -p .local/kiro-scratch/*
+      - mkdir --parents .local/kiro-scratch/*
+      - New-Item -ItemType Directory .local/kiro-scratch*
+      - touch .local/kiro-scratch/*
+      - pytest
+      - pytest *
+      - python3 -m pytest
+      - python3 -m pytest *
+      - python -m pytest
+      - python -m pytest *
+      - .venv/bin/pytest
+      - .venv/bin/pytest *
+      - timeout * pytest
+      - timeout * pytest *
+      - timeout * .venv/bin/pytest
+      - timeout * .venv/bin/pytest *
+      - timeout * .venv/bin/python -m pytest
+      - timeout * .venv/bin/python -m pytest *
+      - PYTHONPATH=src .venv/bin/pytest*
+      - PYTHONPATH=src .venv/bin/python -m pytest*
+      - nohup pytest
+      - nohup pytest *
+      - nohup python -m pytest
+      - nohup python -m pytest *
+      - nohup python3 -m pytest
+      - nohup python3 -m pytest *
+      - nohup .venv/bin/pytest
+      - nohup .venv/bin/pytest *
+      - nohup .venv/bin/python -m pytest
+      - nohup .venv/bin/python -m pytest *
+      - .venv/bin/python -m pytest*
+      - .venv/bin/python3 -m pytest
+      - .venv/bin/python3 -m pytest *
+      - time .venv/bin/python -m pytest
+      - time .venv/bin/python -m pytest *
+      - .venv/bin/python -m pip list*
+      - .venv/bin/pip list*
+      - .venv/bin/python -m pip freeze
+      - .venv/bin/pip freeze
+      - pip show *
+      - pip3 show *
+      - .venv/bin/pip show *
+      - python -m pip show *
+      - python3 -m pip show *
+      - .venv/bin/python -m pip show *
+      - .venv/bin/python -m pip install --no-build-isolation --no-deps -e .
+      - .venv/bin/python -m pip install --no-build-isolation --no-deps --editable .
+      - ruff *
+      - .venv/bin/ruff *
+      - .venv/bin/python -m ruff check *
+      - .venv/bin/python3 -m ruff check *
+      - mypy *
+      - .venv/bin/mypy *
+      - .venv/bin/python -m mypy *
+      - .venv/bin/python3 -m mypy *
+      - markdownlint *
+      - markdownlint-cli2 *
+      - sh -n *
+      - dash -n *
+      - bash -n *
+      - git status*
+      - git diff*
+      - git log*
+      - git show*
+      - git branch
+      - git branch --show-current
+      - git branch --contains *
+      - git branch --all --contains *
+      - git branch -a --contains *
+      - git branch --merged*
+      - git branch --no-merged*
+      - git rev-parse*
+      - git ls-files*
+      - git ls-remote*
+      - git grep*
+      - git check-ignore*
+      - git reflog*
+      - git worktree list*
+      - git stash list*
+      - git stash show*
+      - git stash
+      - git fetch*
+      - git remote -v
+      - git remote --verbose
+      - git remote get-url origin
+      - git config --get*
+      - git config --list*
+      - git config -l*
+      - git config core.hooksPath
+      - git config core.hooksPath .githooks
+      - git add *
+      - git reset -- *
+      - git reset HEAD -- *
+      - git restore --staged *
+      - git switch*
+      - git checkout main
+      - git merge-base*
+      - git commit *
+      - git commit -a*
+      - git commit --all*
+      - git commit * --all*
+      - git push
+      - git push origin feature/*
+      - git push -u origin feature/*
+      - git push --set-upstream origin feature/*
+      - git push origin feat/*
+      - git push -u origin feat/*
+      - git push --set-upstream origin feat/*
+      - git push origin fix/*
+      - git push -u origin fix/*
+      - git push --set-upstream origin fix/*
+      - git push origin bugfix/*
+      - git push -u origin bugfix/*
+      - git push --set-upstream origin bugfix/*
+      - git push origin hotfix/*
+      - git push -u origin hotfix/*
+      - git push --set-upstream origin hotfix/*
+      - git push origin docs/*
+      - git push -u origin docs/*
+      - git push --set-upstream origin docs/*
+      - git push origin refactor/*
+      - git push -u origin refactor/*
+      - git push --set-upstream origin refactor/*
+      - git push origin revert/*
+      - git push -u origin revert/*
+      - git push --set-upstream origin revert/*
+      - git push origin test/*
+      - git push -u origin test/*
+      - git push --set-upstream origin test/*
+      - git push origin tests/*
+      - git push -u origin tests/*
+      - git push --set-upstream origin tests/*
+      - git push origin perf/*
+      - git push -u origin perf/*
+      - git push --set-upstream origin perf/*
+      - git push origin style/*
+      - git push -u origin style/*
+      - git push --set-upstream origin style/*
+      - git push origin build/*
+      - git push -u origin build/*
+      - git push --set-upstream origin build/*
+      - git push origin ci/*
+      - git push -u origin ci/*
+      - git push --set-upstream origin ci/*
+      - git push origin chore/*
+      - git push -u origin chore/*
+      - git push --set-upstream origin chore/*
+      - git push origin deps/*
+      - git push -u origin deps/*
+      - git push --set-upstream origin deps/*
+      - gh status*
+      - gh pr list*
+      - gh pr view*
+      - gh pr diff*
+      - gh pr checks*
+      - gh api repos/*/*/*
+      - gh api repos/*/*/pulls/*/requested_reviewers -X POST -f "reviewers[]=copilot-pull-request-reviewer[bot]"
+      - gh api repos/*/*/pulls/*/requested_reviewers
+      - gh api repos/*/*/pulls/*/reviews
+      - gh api repos/*/*/pulls/*/reviews --jq *
+      - gh api repos/*/*/pulls/*/reviews -q *
+      - gh api repos/*/*/pulls/*/reviews/*
+      - gh api repos/*/*/pulls/*/reviews/* --jq *
+      - gh api repos/*/*/pulls/*/reviews/* -q *
+      - gh api repos/*/*/pulls/*/comments
+      - gh api repos/*/*/pulls/*/comments --jq *
+      - gh api repos/*/*/pulls/*/comments -q *
+      - gh api graphql -f query=*
+      - gh api graphql --raw-field query=*
+      - 'gh api graphql -f query="mutation { resolveReviewThread(input: {threadId: \"$tid\"}) { thread { id isResolved } } }"'
+      - gh pr create*
+      - gh pr edit*
+      - gh pr comment*
+      - gh pr close*
+      - gh issue list*
+      - gh issue view*
+      - gh issue edit*
+      - gh issue close*
+      - gh run list*
+      - gh run view*
+      - gh repo view*
+  - capability: web_search
+    effect: allow
+  - capability: web_fetch
+    effect: allow
+    match:
+      - github.com
+      - raw.githubusercontent.com
+      - kiro.dev
+      - docs.python.org
+      - pypi.org
+      - man7.org
+      - www.rfc-editor.org
+      - rfc-editor.org
