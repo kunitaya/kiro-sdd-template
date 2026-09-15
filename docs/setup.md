@@ -1,61 +1,39 @@
 # Setup and Customization
 
-This document covers **adoption-time customization** of the template. It does not
-describe daily development operation.
+This document covers **adoption-time customization** of the template. It does not own
+daily development operation.
 
 For clone/worktree startup, permissions installation, Issue start/resume, validation,
-review, and recovery procedures, use the
+review, finalization, and recovery, use the
 [Development Operations Runbook](development-operations-runbook.md).
 
 ## Adoption principle
 
-Do **not** simplify mature generic controls merely because the target project differs
-from the source project. The intended transformation is:
+Generalize or adapt only what is truly project- or stack-specific. Preserve mature,
+project-independent lifecycle, safety, review, isolation, and validation controls.
 
-```text
-mature source workflow
-    ↓
-remove / parameterize product-domain specifics
-    ↓
-preserve generic lifecycle, safety, review, isolation, and validation semantics
-```
-
-Not:
-
-```text
-mature source workflow
-    ↓
-rewrite as a shorter approximation
-```
+Do not rewrite an existing safety mechanism as a shorter approximation merely because
+the adopting project differs from the source project.
 
 ## Required project decisions
 
-An adopting repository must decide and record the following before routine development:
+Before routine development, an adopting repository must decide and record:
 
-1. Define the authoritative requirements/domain specification and adapt the authority
-   precedence in `AGENTS.md` only when the repository has a different legitimate
-   authority model.
-2. Define project-specific security, sensitive-data, compliance, and invariant rules.
-3. Adapt `.kiro/steering/source-development.md` and `test-development.md` file-match
-   patterns to the repository layout.
-4. Define the actual validation commands/toolchain and provision required tools through
-   the environment/bootstrap process.
-5. Adapt the project-specific constants at the top of `scripts/bootstrap-workspace`
-   without weakening its generic state machine.
-6. Review `templates/permissions.yaml` and add only the project-specific permission
-   rules that are actually required. The active Kiro workspace permission file is
-   stored outside the repository.
-7. Configure repository Git hooks with `git config core.hooksPath .githooks`.
-8. Validate Kiro's installed native Spec structure, Task Execution, hook behavior, and
-   diagnostics. Reconcile the templates when Kiro changes.
-9. Decide which automated reviewer, if any, supplements Independent Review.
-10. Review `scripts/finalize_spec.py` transport assumptions. The included helper targets
-    `github.com`, `main`, the `gh` CLI, and the repository's two Git hooks.
+1. authoritative requirements and the repository authority model;
+2. project-specific security, sensitive-data, compliance, and invariant rules;
+3. source/test layout and applicable steering file-match patterns;
+4. validation commands and how required tools are provisioned;
+5. project-specific bootstrap settings or an approved replacement readiness mechanism;
+6. project-specific permission additions to `templates/permissions.yaml`;
+7. Git hook usage (`core.hooksPath=.githooks` when the included hooks are retained);
+8. installed Kiro behavior for native Specs, Task Execution, hooks, diagnostics, and
+   permissions;
+9. optional automated-review integration;
+10. any transport differences from the included GitHub/`gh` finalizer assumptions.
 
 ## Repository skeleton
 
-The template keeps common top-level development directories present from the first
-commit:
+The template keeps common development directories present from the first commit:
 
 ```text
 src/
@@ -64,143 +42,104 @@ docs/
 docs/spec-archive/
 ```
 
-A `.gitkeep` preserves an otherwise-empty directory. Remove it once real tracked content
-exists. Keep `docs/spec-archive/` available for finalized Spec delivery.
+A `.gitkeep` preserves an otherwise-empty directory. Remove it after real tracked
+content exists. Keep `docs/spec-archive/` when using the included Spec finalizer.
 
-## Kiro permissions template
+## Kiro permissions adaptation
 
-The repository contains a reviewed source template at:
+The reviewed source template is:
 
 ```text
 templates/permissions.yaml
 ```
 
-Kiro 1.0 stores the active workspace-scoped file outside the repository:
-
-```text
-~/.kiro/workspace-roots/<hash>/permissions.yaml
-```
-
-This prevents a cloned repository from granting itself trust. The repository template
-is therefore a source for human-reviewed installation, not an active permission file.
+The active workspace-scoped permission file is stored outside the repository under the
+Kiro workspace trust directory. The operations runbook owns the installation procedure.
 
 During adoption:
 
-- remove no generic `DENY`/`ASK` guard merely for convenience;
-- add project-specific paths, tools, hosts, or exact commands only when required;
-- keep destructive or authority-changing operations human-supervised;
-- do not add project credentials, secrets, customer data, or local absolute paths;
-- keep the permission template consistent with `AGENTS.md` and `#execution`.
+- retain generic secret/trust/destructive-operation guards unless an explicit reviewed
+  replacement provides equivalent protection;
+- add project-specific paths, tools, exact commands, or documentation hosts only when
+  required;
+- keep destructive or authority-changing operations `ASK` or `DENY` unless there is a
+  documented reason to do otherwise;
+- do not add credentials, customer data, local absolute paths, or machine-specific
+  hashes to the repository template;
+- keep permissions consistent with `AGENTS.md` and `#execution`;
+- use provisioned lint tools directly; do not add package-acquisition runners merely to
+  execute lint.
 
-The operational copy/install procedure belongs to the
-[Development Operations Runbook](development-operations-runbook.md).
+The template intentionally omits product-specific input/output semantics, package/import
+names, fixed runtime versions, test-only environment variables, and domain-only hosts.
 
-## Python/uv bootstrap adaptation points
+## Python/uv bootstrap adaptation
 
-`scripts/bootstrap-workspace` is generalized directly from the production bootstrap.
-For a Python/uv adopting project, normally change only:
+For a Python/uv project using the included bootstrap, normally change only the explicit
+adaptation constants near the top of `scripts/bootstrap-workspace`:
 
 - `EXPECTED_PROJECT_NAME` — `[project].name` from `pyproject.toml`;
 - `SOURCE_IMPORT_NAME` — import name of the project's source package;
 - `SOURCE_PATH_RELATIVE` — repository-relative path that owns that import;
 - `UV_SYNC_EXTRA` — optional uv extra used for the development environment;
-- `REQUIRED_IMPORTS` — optional runtime imports that must succeed before READY.
+- `REQUIRED_IMPORTS` — optional imports that must succeed before READY.
 
-The checked-in placeholder values intentionally fail closed.
-
-The bootstrap-state fingerprint includes the SHA-256 of
-`scripts/bootstrap-workspace` itself in addition to the worktree/runtime/dependency
-inputs. Any adaptation or bootstrap-logic change therefore invalidates the prior READY
+The checked-in placeholders intentionally fail closed. The bootstrap fingerprints its
+own script/configuration, so changing these settings invalidates the previous READY
 state.
 
-If the adopting repository does not use Python/uv, replace the implementation with a
-stack-equivalent readiness mechanism preserving the same isolation contract, or remove
-the bootstrap script, hook, and corresponding lifecycle checkpoints together.
+The generic readiness and isolation contract is owned by `#execution` and the bootstrap
+implementation itself; do not duplicate or weaken that state machine here.
 
-## Workspace bootstrap contract
+If the project does not use Python/uv, replace the implementation with a stack-equivalent
+readiness mechanism or remove the bootstrap script, readiness hook, and corresponding
+lifecycle checkpoints together.
 
-The bootstrap is a readiness boundary, not merely an installer. Preserve these generic
-properties:
-
-- resolve the physical owning Git worktree at runtime;
-- reject missing/inconsistent dependency lock state before mutation;
-- reject shared mutable environments, including symlinked or mounted `.venv` paths;
-- reject foreign/symlinked bootstrap lock metadata;
-- verify configured project identity before mutation;
-- verify runtime and imported project source belong to this worktree;
-- fingerprint root, runtime, manifest, lockfile, and bootstrap configuration;
-- strictly parse and atomically replace bootstrap state;
-- serialize mutating bootstrap operations with an exclusive lock;
-- hold a shared lock for the full non-mutating `--check`;
-- fail closed when readiness metadata is absent, invalid, or stale;
-- verify configured required imports before READY.
-
-## Spec templates
+## Spec and steering adaptation
 
 Templates under `.kiro/specs/_templates/` preserve Kiro native workflow concepts while
-adding repository governance. Do not remove sections merely to make the template
-shorter.
+adding repository governance. Adapt product/domain content and repository-specific
+traceability, but do not remove native or safety sections merely to shorten the files.
 
-When adapting them:
+Adapt `.kiro/steering/source-development.md` and `test-development.md` to the actual
+source/test layout. Keep other steering changes limited to genuine environment or policy
+differences.
 
-1. inspect the installed Kiro native artifact shape;
-2. preserve native sections and task lifecycle;
-3. retain repository workspace/traceability/invariant/matrix/delivery controls;
-4. validate references and task-graph recognition where diagnostics exist;
-5. run applicable Markdown/config checks using provisioned tools;
-6. record unavailable diagnostics as unavailable rather than PASS.
+Daily Spec execution is owned by `.kiro/specs/README.md` and the operations runbook.
 
-Daily Spec execution belongs to `.kiro/specs/README.md` and the operations runbook.
+## Finalizer adaptation
 
-## Final delivery contract
-
-`scripts/finalize-spec` is generalized directly from the production reviewed-delivery
-helper. Repository identity is derived from `origin`; the delivery state machine is
-preserved rather than reimplemented as a simple archive command.
-
-The generic contract includes:
-
-- repository root and dedicated attached branch verification;
-- fetch/push origin verification for the same GitHub repository;
-- configured/executable Git hooks;
-- rejection of in-progress merge/cherry-pick/revert/rebase operations;
-- concrete independent PASS evidence on the owning PR;
-- exact reviewed/mechanical tree-state validation;
-- same-repository PR and expected base/head validation;
-- regular-file/symlink containment checks for Spec/archive paths;
-- unrelated-change rejection;
-- resumable two-phase archive/Ready/completion publication.
+`scripts/finalize-spec` / `scripts/finalize_spec.py` assume GitHub, `main` as the base
+branch, the `gh` CLI, and the included repository hooks.
 
 If the Git host or delivery model differs, adapt the transport/interface boundary while
-preserving these invariants.
+preserving the reviewed mechanical-delivery state machine. Detailed delivery behavior is
+owned by `#execution`, `.kiro/specs/README.md`, and the implementation; do not duplicate
+it here.
 
-## Validation baseline
+## Validation and Kiro compatibility
 
-The template includes `.markdownlint.json` as the shared Markdown baseline.
+The template includes `.markdownlint.json` as a shared Markdown baseline. Define the
+adopting repository's actual source/test/static-analysis commands and provision those
+tools during environment setup.
 
-Shell/Python scripts should also receive syntax/static/runtime validation appropriate to
-the adopting environment. Missing tools or unavailable diagnostics remain unverified;
-they are not PASS.
+Kiro product behavior can evolve independently of repository policy. Revalidate native
+Spec behavior, permissions, hooks, diagnostics, and Multi-root behavior against the
+installed Kiro version when those surfaces change.
 
-## Native Kiro compatibility
-
-These files augment Kiro rather than reimplement it. Permissions, Multi-root behavior,
-Spec Task Execution, hooks, and diagnostics may change with Kiro releases.
-
-Treat product behavior separately from repository-controlled invariants and revalidate
-assumptions when the installed Kiro version changes.
+Unavailable tools or diagnostics are recorded as unverified, never as PASS.
 
 ## What remains project-specific
 
-Keep these in the adopting repository rather than this generic template:
+Keep these in the adopting repository rather than in the generic template:
 
 - product/domain requirements and terminology;
-- customer-specific configuration;
-- production-data and compliance details;
+- customer-specific configuration and sensitive-data rules;
+- production-data handling and compliance details;
 - product schemas and domain identities;
-- business-specific scale assumptions;
 - Issue-specific design decisions and execution history;
-- project-specific dependency extras, import smoke tests, runtime versions, and
-  permission exceptions.
+- dependency extras, import smoke tests, runtime versions, and permission exceptions
+  that are required only by that project.
 
-The template owns development governance. The adopting repository owns product truth.
+The template owns reusable development governance. The adopting repository owns product
+truth.
