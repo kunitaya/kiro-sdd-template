@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Workspace Environment Readiness Signal",
+      "trigger": "PreTaskExec",
+      "description": "Runs the repository bootstrap readiness check before native task execution. Treat this as a diagnostic signal unless blocking behavior has been verified for the installed Kiro version.",
+      "action": {
+        "type": "command",
+        "command": "./scripts/bootstrap-workspace --check"
+      },
+      "timeout": 30
+    }
+  ]
+}

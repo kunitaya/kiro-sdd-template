@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+while read local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main)
+      echo "Refusing direct push to main; use a pull request." >&2
+      exit 1
+      ;;
+  esac
+done

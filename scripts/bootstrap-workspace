@@ -1,0 +1,38 @@
+#!/bin/sh
+# Generic per-worktree Python/uv bootstrap example.
+# Adapt or replace this script for non-Python projects; keep the --check contract if the Kiro hook is retained.
+set -eu
+
+mode=mutate
+if [ "${1:-}" = "--check" ]; then mode=check; shift; fi
+if [ "$#" -ne 0 ]; then echo "usage: ./scripts/bootstrap-workspace [--check]" >&2; exit 64; fi
+
+fail() { echo "WORKSPACE_NOT_READY" >&2; echo "$1" >&2; [ "$mode" = check ] && exit 2 || exit 1; }
+
+command -v git >/dev/null 2>&1 || fail "git is required"
+command -v uv >/dev/null 2>&1 || fail "uv is required; adapt scripts/bootstrap-workspace if this project uses another environment manager"
+root=$(git rev-parse --show-toplevel 2>/dev/null) || fail "not inside a Git worktree"
+cd "$root"
+
+[ -f pyproject.toml ] || fail "pyproject.toml is missing; adapt the bootstrap script for this repository"
+[ -f uv.lock ] || fail "uv.lock is missing; adapt the bootstrap script or generate the project lockfile through the normal dependency workflow"
+
+if [ -L .venv ]; then fail ".venv must not be a symlink to another worktree/environment"; fi
+
+ready() {
+  [ -x .venv/bin/python ] || return 1
+  .venv/bin/python -c 'import sys; print(sys.executable)' >/dev/null 2>&1 || return 1
+  return 0
+}
+
+if [ "$mode" = check ]; then
+  ready || fail "workspace environment is not READY; run ./scripts/bootstrap-workspace"
+  echo "WORKSPACE_READY"
+  exit 0
+fi
+
+uv sync
+ready || fail "uv sync completed but .venv is not READY"
+mkdir -p .local/kiro-scratch
+printf '%s\n' "WORKSPACE_READY" > .local/kiro-scratch/bootstrap-state.txt
+echo "WORKSPACE_READY"
