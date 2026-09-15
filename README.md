@@ -69,8 +69,9 @@ Key principles:
   mini-format;
 - task prompts carry task-specific facts, not duplicated repository policy;
 - worktrees are isolated at runtime by root/branch/repository identity;
-- workspace READY means the current worktree/runtime/dependency state matches the
-  recorded bootstrap fingerprint, not merely that an interpreter exists;
+- workspace READY means the current worktree/runtime/dependency/bootstrap-configuration
+  state matches the recorded bootstrap fingerprint, not merely that an interpreter
+  exists;
 - lint/validation uses already-provisioned tools rather than package-acquisition
   runners;
 - verification is risk-based and reusable rather than repeated mechanically;
@@ -91,7 +92,7 @@ bootstrap is the reference implementation for Python/uv repositories. It validat
 - rejection of symlinked or separately mounted `.venv` environments;
 - `.venv` interpreter binding to the current worktree;
 - a state fingerprint covering physical repository root, Python version,
-  `pyproject.toml`, and `uv.lock`;
+  `pyproject.toml`, `uv.lock`, and the bootstrap script/configuration itself;
 - serialized mutating bootstrap operations; and
 - a fail-closed, non-mutating `--check` path used by the Kiro readiness hook.
 
@@ -132,17 +133,20 @@ applicable structural/adversarial matrices.
 passed. The caller supplies a full independently reviewed commit SHA and concrete PASS
 record URL. Before archival it requires, among other things:
 
-- clean working tree/index at exactly the reviewed commit;
+- clean working tree/index at an explicitly recognized reviewed/mechanical state;
 - configured/executable repository Git hooks;
-- an open Draft PR whose head/base match the current branch and `main`;
-- remote PR HEAD equal to the reviewed commit;
+- an owning same-repository PR whose head/base match the current branch and `main`;
+- remote PR HEAD in one of the exact allowed delivery states;
 - complete Spec artifacts;
-- every task/review checkpoint complete except the two final mechanical checkpoints;
-- no pre-existing archive destination.
+- every task/review checkpoint complete except the final review/finalization markers;
+- no unrecognized local or remote tree state.
 
-It then performs only the mechanical post-review transition: mark the two final
-checkpoints, record the PASS reference, archive the Spec, commit/push the reviewed
-mechanical change, and transition the same Draft PR to Ready. Merge remains manual.
+Delivery is deliberately two-phase. First the helper records the final-review result in
+the reviewed Spec, archives that Spec, and commits/pushes the archive while the PR is
+still Draft. It then transitions the same PR to Ready and confirms that transition.
+Only after Ready is confirmed does it write the final delivery-completion record and
+publish that second mechanical commit. Recognized partial states can be resumed safely;
+merge remains manual.
 
 ## Adoption
 
