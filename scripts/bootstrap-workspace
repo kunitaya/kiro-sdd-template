@@ -182,6 +182,7 @@ print("{0}.{1}.{2}".format(*sys.version_info[:3]))
 ')
     FP_PYPROJECT_SHA256=$(sha256sum -- "$fingerprint_root/pyproject.toml" | awk '{ print $1 }')
     FP_UV_LOCK_SHA256=$(sha256sum -- "$fingerprint_root/uv.lock" | awk '{ print $1 }')
+    FP_BOOTSTRAP_SCRIPT_SHA256=$(sha256sum -- "$fingerprint_root/scripts/bootstrap-workspace" | awk '{ print $1 }')
 }
 
 parse_state_file() {
@@ -214,25 +215,31 @@ expected_fields = {
     "python_version",
     "pyproject_sha256",
     "uv_lock_sha256",
+    "bootstrap_script_sha256",
     "bootstrapped_at",
 }
 if set(data.keys()) != expected_fields:
     sys.exit(2)
 format_version = data["format_version"]
-if isinstance(format_version, bool) or not isinstance(format_version, int) or format_version != 1:
+if isinstance(format_version, bool) or not isinstance(format_version, int) or format_version != 2:
     sys.exit(2)
 for field_name in (
     "repo_root",
     "python_version",
     "pyproject_sha256",
     "uv_lock_sha256",
+    "bootstrap_script_sha256",
     "bootstrapped_at",
 ):
     value = data[field_name]
     if not isinstance(value, str) or value == "":
         sys.exit(2)
 hex_digits = set("0123456789abcdef")
-for hash_field_name in ("pyproject_sha256", "uv_lock_sha256"):
+for hash_field_name in (
+    "pyproject_sha256",
+    "uv_lock_sha256",
+    "bootstrap_script_sha256",
+):
     hash_value = data[hash_field_name]
     if len(hash_value) != 64 or any(char not in hex_digits for char in hash_value):
         sys.exit(2)
@@ -240,6 +247,7 @@ print(data["repo_root"])
 print(data["python_version"])
 print(data["pyproject_sha256"])
 print(data["uv_lock_sha256"])
+print(data["bootstrap_script_sha256"])
 print(data["bootstrapped_at"])
 ' "$parse_target"
 }
@@ -264,7 +272,7 @@ read_state() {
     set +f
     IFS=$state_old_ifs
 
-    if [ "$#" -ne 5 ]; then
+    if [ "$#" -ne 6 ]; then
         return 2
     fi
 
@@ -272,7 +280,8 @@ read_state() {
     ST_PYTHON_VERSION="$2"
     ST_PYPROJECT_SHA256="$3"
     ST_UV_LOCK_SHA256="$4"
-    ST_BOOTSTRAPPED_AT="$5"
+    ST_BOOTSTRAP_SCRIPT_SHA256="$5"
+    ST_BOOTSTRAPPED_AT="$6"
     return 0
 }
 
@@ -297,17 +306,18 @@ import sys
 
 output_path = sys.argv[1]
 document = {
-    "format_version": 1,
+    "format_version": 2,
     "repo_root": sys.argv[2],
     "python_version": sys.argv[3],
     "pyproject_sha256": sys.argv[4],
     "uv_lock_sha256": sys.argv[5],
-    "bootstrapped_at": sys.argv[6],
+    "bootstrap_script_sha256": sys.argv[6],
+    "bootstrapped_at": sys.argv[7],
 }
 with open(output_path, "w", encoding="utf-8") as output_file:
     json.dump(document, output_file, indent=2, sort_keys=True)
     output_file.write("\n")
-' "$write_tmp_file" "$FP_REPO_ROOT" "$FP_PYTHON_VERSION" "$FP_PYPROJECT_SHA256" "$FP_UV_LOCK_SHA256" "$write_timestamp"
+' "$write_tmp_file" "$FP_REPO_ROOT" "$FP_PYTHON_VERSION" "$FP_PYPROJECT_SHA256" "$FP_UV_LOCK_SHA256" "$FP_BOOTSTRAP_SCRIPT_SHA256" "$write_timestamp"
     ) 2>/dev/null; then
         rm -f -- "$write_tmp_file" 2>/dev/null
         fail WORKSPACE_STATE_WRITE_FAILED \
@@ -556,7 +566,8 @@ attempt_fast_path() {
     if [ "$ST_REPO_ROOT" != "$FP_REPO_ROOT" ] ||
         [ "$ST_PYTHON_VERSION" != "$FP_PYTHON_VERSION" ] ||
         [ "$ST_PYPROJECT_SHA256" != "$FP_PYPROJECT_SHA256" ] ||
-        [ "$ST_UV_LOCK_SHA256" != "$FP_UV_LOCK_SHA256" ]; then
+        [ "$ST_UV_LOCK_SHA256" != "$FP_UV_LOCK_SHA256" ] ||
+        [ "$ST_BOOTSTRAP_SCRIPT_SHA256" != "$FP_BOOTSTRAP_SCRIPT_SHA256" ]; then
         return 1
     fi
 
@@ -629,9 +640,10 @@ run_check() {
     if [ "$ST_REPO_ROOT" != "$FP_REPO_ROOT" ] ||
         [ "$ST_PYTHON_VERSION" != "$FP_PYTHON_VERSION" ] ||
         [ "$ST_PYPROJECT_SHA256" != "$FP_PYPROJECT_SHA256" ] ||
-        [ "$ST_UV_LOCK_SHA256" != "$FP_UV_LOCK_SHA256" ]; then
+        [ "$ST_UV_LOCK_SHA256" != "$FP_UV_LOCK_SHA256" ] ||
+        [ "$ST_BOOTSTRAP_SCRIPT_SHA256" != "$FP_BOOTSTRAP_SCRIPT_SHA256" ]; then
         fail WORKSPACE_ENVIRONMENT_STALE \
-            "Recorded bootstrap state no longer matches the current worktree (pyproject.toml/uv.lock content, resolved root, or Python version changed)."
+            "Recorded bootstrap state no longer matches the current worktree (bootstrap script/configuration, pyproject.toml/uv.lock content, resolved root, or Python version changed)."
     fi
 
     verify_lock "$check_root"
