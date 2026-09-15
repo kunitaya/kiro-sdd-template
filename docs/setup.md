@@ -78,6 +78,12 @@ change only the constants near the top of the script:
 The checked-in placeholder values intentionally fail closed. Configure them before
 using the bootstrap or its Kiro `PreTaskExec` readiness hook.
 
+The bootstrap-state fingerprint includes the SHA-256 of
+`scripts/bootstrap-workspace` itself in addition to the worktree/runtime/dependency
+inputs. Therefore changing any adaptation constant or bootstrap logic invalidates the
+previous READY state automatically; rerun the mutating bootstrap to establish a new
+state before `--check` can pass.
+
 If the adopting repository does not use Python/uv, replace the implementation with a
 stack-equivalent bootstrap while preserving the same readiness and isolation contract,
 or remove the script, hook, and corresponding lifecycle checkpoints together.
@@ -93,7 +99,8 @@ boundary. Its generic properties are:
 - reject foreign/symlinked bootstrap lock metadata;
 - verify the configured project identity before mutation;
 - verify that the runtime and imported project source belong to this worktree;
-- fingerprint the owning root, runtime version, project manifest, and lockfile;
+- fingerprint the owning root, runtime version, project manifest, lockfile, and
+  bootstrap script/configuration;
 - strictly parse and atomically replace bootstrap state;
 - serialize mutating bootstrap operations with an exclusive lock;
 - hold a shared lock for the full non-mutating `--check` verification;
