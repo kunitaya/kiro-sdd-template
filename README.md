@@ -2,66 +2,191 @@
 
 English (authoritative) | [日本語](README.ja.md)
 
-A template for Kiro-based spec-driven development, with shared agent instructions, scoped steering, and implementation and review workflows.
+A reusable Kiro-based Spec-Driven Development environment generalized from a
+production-style AI-assisted workflow. The goal is to preserve mature development
+governance and safety controls while keeping product/domain truth in the adopting
+repository.
 
-This project is intended for individual developers and teams who want to reuse a requirements-driven development process across repositories.
+This is **not** a shortened rewrite of the source workflow. The reusable rules retain
+the original process depth where that depth is project-independent: requirement
+authority, native Spec structure, worktree isolation, deterministic workspace
+readiness, review convergence, fail-closed delivery, and human merge authority.
 
-> **Status: Under construction.** The repository currently contains this README, its Japanese reference translation, and `LICENSE`. Agent instructions, steering, Spec templates, and setup instructions are planned. It is not yet a ready-to-use development environment.
+## Included components
 
-## Purpose
+| Path | Purpose |
+| --- | --- |
+| `AGENTS.md` | Repository-wide authority, scope, Git safety, verification, review, and SDD policy |
+| `.kiro/steering/` | Scoped SDD, execution, review, documentation, testing, source, workspace, and task guidance |
+| `.kiro/specs/_templates/` | Native-compatible requirements, design, bugfix, and tasks templates with governance/matrices |
+| `.kiro/hooks/workspace-bootstrap-check.json` | `PreTaskExec` workspace-readiness diagnostic hook |
+| `.githooks/` | Guards against direct commit/push to `main` |
+| `scripts/bootstrap-workspace` | Deterministic Python/uv per-worktree bootstrap with fail-closed non-mutating `--check` |
+| `scripts/finalize-spec` / `scripts/finalize_spec.py` | Validated mechanical post-review Spec delivery and Draft-to-Ready transition |
+| `templates/kiro-task-prompt.md` | Bounded task-prompt template |
+| `docs/setup.md` | Adoption and customization guide |
+| `.markdownlint.json` | Shared Markdown validation baseline |
 
-Make the relationship between requirements, change scope, design, implementation, verification, and review explicit. Provide reusable guidance that projects can adapt to their own requirements, technology stack, and development environment.
+## Core workflow
 
-## Workflow principles to preserve
+```text
+Authoritative project requirements + GitHub Issue
+    ↓
+Choose Direct Change or a Kiro Spec by semantic risk
+    ↓
+Requirements/Design/Bugfix artifacts -> tasks.md
+    ↓
+Validate and publish to a dedicated branch + Draft PR
+    ↓
+Supplemental automated review, if available
+    ↓
+Independent Spec Review
+    ↓
+Implementation authorization
+    ↓
+Native Kiro Spec Task Execution
+    ↓
+Implementation + proportionate validation
+    ↓
+Final validation + publication to the same Draft PR
+    ↓
+Supplemental automated re-review, if available
+    ↓
+Independent Code / Requirements Review
+    ↓
+Required fixes / delta review
+    ↓
+Validated mechanical Spec archive + Draft PR Ready
+    ↓
+Human merge gate
+```
 
-The planned template will preserve these principles when the reusable rules are introduced:
+Key principles:
 
-- **Requirements remain authoritative.** A change Issue defines scope and acceptance criteria within the project's authoritative requirements. Specs, implementation, and tests must not silently redefine those requirements.
-- **Separate policy from execution guidance.** `AGENTS.md` defines shared repository rules. Scoped steering supplies operational detail. Task prompts focus on the assignment instead of duplicating repository-wide policy.
-- **Choose the change route by semantic risk.** Substantive design and implementation work uses a Spec. A Direct Change route is reserved for corrections whose method is already fully determined and that introduce no new design or contract decisions; it still requires verification and independent implementation review. Small diff size alone does not justify skipping a Spec.
-- **Keep Spec and implementation review distinct.** Independent Spec Review checks whether implementation can proceed without guessing about material behavior. Independent Code / Requirements Review checks the resulting implementation against the requirements and relevant invariants.
-- **Preserve Kiro's native task lifecycle.** Spec implementation tasks are started through Kiro's Spec Task Execution interface. Supplementary chat prompts do not select or start incomplete tasks.
-- **Use proportionate verification and conclusive reviews.** Gather sufficient evidence for the affected requirements and risks. Blocking findings require correction; optional improvements alone do not justify another correction round.
-- **Treat automated review as supporting evidence.** Automated suggestions must be assessed against the task and its requirements. They do not replace independent review or authorize a merge.
-- **Deliver through dedicated branches and pull requests.** Keep a change's Spec and implementation in the same Draft PR where applicable. Stop at the appropriate independent-review handoff. Complete required reviews and Spec archival before marking a Spec-driven PR ready; merge remains a human decision unless explicitly delegated.
-- **Describe current rules directly.** Reusable documentation explains the current intended process and its rationale. Issue-specific execution history and verification evidence remain in their appropriate records.
+- higher-authority requirements are never rewritten to fit current code;
+- one Issue normally owns one branch and one PR;
+- Kiro's native artifact/task lifecycle is preserved rather than replaced by a custom
+  mini-format;
+- task prompts carry task-specific facts, not duplicated repository policy;
+- worktrees are isolated at runtime by root/branch/repository identity;
+- workspace READY means the current worktree/runtime/dependency/bootstrap-configuration
+  state matches the recorded bootstrap fingerprint, not merely that an interpreter
+  exists;
+- lint/validation uses already-provisioned tools rather than package-acquisition
+  runners;
+- verification is risk-based and reusable rather than repeated mechanically;
+- automated review is supplemental evidence, not an authority;
+- only BLOCKING findings create mandatory correction rounds;
+- final delivery validates review evidence, PR/branch state, completion state, clean
+  reviewed HEAD, and Git safety controls before archival/Ready;
+- merge remains a human/operator decision unless explicitly delegated.
 
-The detailed route criteria, review gates, and execution procedures will be provided by the planned agent instructions and steering. This overview does not claim that those files or controls have already been installed.
+## Workspace and bootstrap model
+
+Each Git worktree is treated as its own mutable development environment. The included
+bootstrap is the reference implementation for Python/uv repositories. It validates:
+
+- repository/worktree resolution;
+- required tooling;
+- `uv.lock` consistency before sync;
+- rejection of symlinked or separately mounted `.venv` environments;
+- `.venv` interpreter binding to the current worktree;
+- a state fingerprint covering physical repository root, Python version,
+  `pyproject.toml`, `uv.lock`, and the bootstrap script/configuration itself;
+- serialized mutating bootstrap operations; and
+- a fail-closed, non-mutating `--check` path used by the Kiro readiness hook.
+
+```bash
+./scripts/bootstrap-workspace          # initialize/repair READY
+./scripts/bootstrap-workspace --check  # non-mutating readiness verification
+```
+
+Projects using another technology stack should **replace the implementation without
+weakening the contract**. If they do not want workspace bootstrap/readiness enforcement,
+they should remove the script, hook, and corresponding lifecycle checkpoints together.
+
+The Kiro `PreTaskExec` hook surfaces readiness diagnostics. Do not assume the hook
+itself blocks task start unless that behavior has been verified for the installed Kiro
+version; the workspace owner remains responsible for confirming READY before native
+task execution.
+
+## Native Spec compatibility
+
+The files under `.kiro/specs/_templates/` augment Kiro's native Spec artifacts. They
+preserve native workflow concepts and expected sections while adding repository
+workspace identity, requirement traceability, invariant inventories, review matrices,
+resumable task state, and delivery checkpoints.
+
+When Kiro changes its native Spec structures, task execution, hooks, or diagnostics,
+inspect the installed behavior and reconcile the template. Do not freeze an obsolete
+native contract merely because it was once copied into this repository.
+
+## Review and delivery
+
+Independent Spec Review asks whether implementation can begin without guessing about
+material behavior. Independent Code / Requirements Review evaluates the resulting
+implementation against requirements and affected invariants. High-risk state,
+identity/provenance, persistence, status/NULL, security, or lifecycle changes use the
+applicable structural/adversarial matrices.
+
+`scripts/finalize-spec` is deliberately fail-closed. It does **not** decide that review
+passed. The caller supplies a full independently reviewed commit SHA and concrete PASS
+record URL. Before archival it requires, among other things:
+
+- clean working tree/index at an explicitly recognized reviewed/mechanical state;
+- configured/executable repository Git hooks;
+- an owning same-repository PR whose head/base match the current branch and `main`;
+- remote PR HEAD in one of the exact allowed delivery states;
+- complete Spec artifacts;
+- every task/review checkpoint complete except the final review/finalization markers;
+- no unrecognized local or remote tree state.
+
+Delivery is deliberately two-phase. First the helper records the final-review result in
+the reviewed Spec, archives that Spec, and commits/pushes the archive while the PR is
+still Draft. It then transitions the same PR to Ready and confirms that transition.
+Only after Ready is confirmed does it write the final delivery-completion record and
+publish that second mechanical commit. Recognized partial states can be resumed safely;
+merge remains manual.
+
+## Adoption
+
+Read [Setup and Customization](docs/setup.md). An adopting repository must explicitly
+define or adapt:
+
+- authoritative project/domain requirements;
+- project-specific invariants and security/sensitive-data rules;
+- source/test file-match patterns;
+- validation commands and tool provisioning;
+- environment/bootstrap implementation for its stack;
+- automated-review integration, if any;
+- GitHub host/repository conventions if they differ from the included helper's
+  `github.com` assumptions.
+
+Do not move domain requirements, customer-specific configuration, product schemas,
+business terminology, or Issue-specific history into this reusable template.
+
+Configure the included Git hooks after cloning/creating a worktree:
+
+```bash
+git config core.hooksPath .githooks
+```
 
 ## Language policy
 
-English is the default language for repository and GitHub artifacts, including:
+English is authoritative for repository/GitHub artifacts. `README.ja.md` is a reference
+translation and must be updated with this README whenever its meaning changes.
+Interactive operator communication may use the operator's preferred language.
 
-- this README, `AGENTS.md`, steering, Specs, and technical documentation;
-- code comments, docstrings, test names, and technical identifiers;
-- commit messages, Issue and PR titles and bodies, comments, and review records.
+## Status
 
-Interactive reports to the human operator may use the operator's preferred language. For this repository's maintenance workflow, those reports are in Japanese. Reports persisted in the repository or on GitHub remain in English.
-
-`README.ja.md` is an explicitly permitted reference translation of this README. The English version remains authoritative; the Japanese version must not independently redefine rules. Update both files in the same change whenever README content changes, keeping their meaning synchronized. This exception does not extend to `AGENTS.md`, steering, Specs, or reports persisted on GitHub.
-
-## Planned contents
-
-The following components are not yet included. Their paths and setup instructions will be documented as they are added.
-
-| Component | Purpose |
-| --- | --- |
-| `AGENTS.md` | Authority, scope, language, repository safety, and review policy |
-| `.kiro/steering/` | Scoped workflow, execution, workspace isolation, documentation, and review guidance |
-| Spec templates | Requirements, design, and task artifacts appropriate to the selected workflow |
-| Task prompt templates | Task-specific objectives, constraints, verification, and handoff conditions |
-| Review templates | Independent Spec Review and Independent Code / Requirements Review |
-| Setup and customization guide | Project adaptation and configuration of repository and environment controls |
-
-## Adoption and contributions
-
-Setup and compatibility guidance will be added after the template components are available and verified. Projects adopting the template will need to define their authoritative requirements, acceptance criteria, validation commands, and environment-specific controls.
-
-Use [Issues](https://github.com/kunitaya/kiro-sdd-template/issues) for suggestions and defects. Keep contributions focused, write repository and GitHub content in English, and submit changes through a dedicated branch and pull request. Changes to the Japanese README follow the reference-translation policy above.
+The reusable governance and SDD environment is included. Adopting repositories still
+require explicit project customization and validation against their installed Kiro and
+toolchain versions.
 
 ## Project status and affiliation
 
-This is an independently maintained, unofficial template. It is not an official product of, or endorsed by, the developers of Kiro or OpenAI.
+This is independently maintained and unofficial. It is not an official product of, or
+endorsed by, Kiro, OpenAI, or their developers.
 
 ## License
 

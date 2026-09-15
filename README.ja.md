@@ -2,68 +2,163 @@
 
 [English（正本）](README.md) | 日本語
 
-> このファイルは英語版 [README.md](README.md) の参考訳です。英語版を正本とし、内容に相違がある場合は英語版を優先します。英語版を変更する際は、この参考訳も同じ変更内で更新し、意味を一致させてください。
+> このファイルは英語版 `README.md` の参考訳です。意味が異なる場合は英語版を優先し、英語版を変更する際はこのファイルも同じ変更で同期してください。
 
-Kiroを用いた仕様駆動開発のためのテンプレートです。共通のエージェント向け指示、適用範囲を限定したSteering、実装・レビューのワークフローを整備します。
+Kiroを用いたSpec-Driven Development（SDD）環境を再利用するためのテンプレートです。実運用向けのAI支援開発フローから、
+製品・業務固有の要件だけを除去し、成熟した開発ガバナンスと安全制御を保持することを目的としています。
 
-要件に基づく開発プロセスを複数のリポジトリで再利用したい個人開発者やチームを対象としています。
+これは元ワークフローの「短縮版」ではありません。要件の権威、Kiro native Spec構造、worktree分離、決定論的なworkspace readiness、
+レビュー収束、fail-closedな最終delivery、人によるmerge gateなど、プロジェクト非依存の重要な運用深度は維持します。
 
-> **状態：整備中。** 現在収録されているのは、英語版README、この日本語参考訳、`LICENSE`です。エージェント向け指示、Steering、Specテンプレート、セットアップ手順は収録予定です。そのまま利用できる開発環境としては、まだ完成していません。
+## 収録内容
 
-## 目的
+| パス | 用途 |
+| --- | --- |
+| `AGENTS.md` | 権威順序、スコープ、Git安全性、検証、レビュー、SDD方針 |
+| `.kiro/steering/` | SDD、実行、レビュー、文書、テスト、source、workspace、task運用 |
+| `.kiro/specs/_templates/` | Kiro native構造を保持したrequirements/design/bugfix/tasksテンプレートと各種matrix |
+| `.kiro/hooks/workspace-bootstrap-check.json` | `PreTaskExec` workspace readiness診断 |
+| `.githooks/` | `main`への直接commit/push防止 |
+| `scripts/bootstrap-workspace` | Python/uv向け決定論的worktree bootstrapとfail-closedな`--check` |
+| `scripts/finalize-spec` / `scripts/finalize_spec.py` | 独立レビュー後の検証付き機械的Spec deliveryとDraft→Ready遷移 |
+| `templates/kiro-task-prompt.md` | 境界を絞ったタスクプロンプト |
+| `docs/setup.md` | 導入・カスタマイズ手順 |
+| `.markdownlint.json` | 共通Markdown検証ベースライン |
 
-要件、変更範囲、設計、実装、検証、レビューの関係を明確にします。各プロジェクトの要件、技術構成、開発環境に合わせて調整できる、再利用可能な指針を提供します。
+## 基本フロー
 
-## 継承するワークフローの原則
+```text
+正式なプロジェクト要件 + GitHub Issue
+    ↓
+意味上のリスクに応じてDirect ChangeまたはKiro Specを選択
+    ↓
+requirements/design/bugfix -> tasks.md
+    ↓
+検証して専用branch + Draft PRへ公開
+    ↓
+利用可能なら補助的な自動レビュー
+    ↓
+Independent Spec Review
+    ↓
+実装承認
+    ↓
+Kiro native Spec Task Execution
+    ↓
+実装 + リスクに見合う検証
+    ↓
+最終検証 + 同じDraft PRへ公開
+    ↓
+利用可能なら補助的な自動再レビュー
+    ↓
+Independent Code / Requirements Review
+    ↓
+必要な修正 / delta review
+    ↓
+検証付きの機械的Spec archive + Draft PR Ready
+    ↓
+人によるmerge gate
+```
 
-今後、共通ルールを導入する際は、次の原則を維持します。
+主な原則:
 
-- **要件を判断の基準とする。** 変更を扱うIssueは、プロジェクトの正式な要件の範囲内で、変更範囲と受け入れ基準を定義します。Spec、実装、テストによって、それらの要件を暗黙に再定義してはいけません。
-- **方針と実行手順を分ける。** `AGENTS.md`はリポジトリ共通のルールを定義します。適用範囲を限定したSteeringは、実行上の詳細を定めます。タスク用プロンプトは、共通方針を重複記載するのではなく、個別の作業指示に集中させます。
-- **意味や契約への影響に応じて変更経路を選ぶ。** 実質的な設計・実装作業にはSpecを用います。Direct Changeは、修正方法がすでに確定し、新たな設計や契約上の判断を伴わない修正に限定します。この経路でも検証と独立した実装レビューは必要です。差分が小さいという理由だけでSpecを省略してはいけません。
-- **Specレビューと実装レビューを分ける。** Independent Spec Reviewは、重要な挙動を推測せずに実装へ進めるかを確認します。Independent Code / Requirements Reviewは、実装結果が要件と関連する不変条件を満たしているかを確認します。
-- **Kiro標準のタスクライフサイクルを維持する。** Specの実装タスクは、KiroのSpec Task Executionインターフェースから開始します。補助的なチャットプロンプトから未完了タスクを選択・開始しません。
-- **リスクに見合う検証を行い、レビューを結論まで進める。** 影響を受ける要件とリスクに対して十分な証拠を集めます。BLOCKING指摘は修正が必要ですが、任意の改善だけを理由に修正ラウンドを追加しません。
-- **自動レビューを補助的な証拠として扱う。** 自動レビューの提案は、タスクと要件に照らして評価します。独立レビューの代替にはならず、マージを許可するものでもありません。
-- **専用ブランチとPRを通じて成果物を提出する。** 適用される場合、同一変更のSpecと実装は同じDraft PRで管理します。該当する独立レビューへの引き渡し時点で作業を止めます。Specに基づくPRは、必要なレビューとSpecのアーカイブを完了してからReadyにします。明示的に委任されていない限り、マージは人が判断します。
-- **現在のルールを直接説明する。** 再利用する文書には、現在意図しているプロセスとその根拠を記載します。Issue固有の実行履歴や検証証拠は、それぞれ適切な記録に保持します。
+- 上位の要件を現行コードに合わせて書き換えない。
+- 原則として1 Issue = 1 branch = 1 PRとする。
+- Kiro nativeのartifact/task lifecycleを独自の簡易形式に置き換えない。
+- タスクプロンプトにはタスク固有情報を載せ、リポジトリ共通方針を重複させない。
+- worktreeはroot/branch/repository identityを実行時に確認して分離する。
+- workspace READYは「Pythonが存在する」ではなく、現在のworktree/runtime/dependency/bootstrap設定が
+  記録済みfingerprintと一致することを意味する。
+- lint/validationでは既に用意されたツールを使い、パッケージ取得runnerで代用しない。
+- 検証証拠はリスクに応じて取得し、無意味に何度も再実行しない。
+- 自動レビューは補助証拠であり、権威や独立レビューの代替ではない。
+- BLOCKINGだけを必須修正ラウンドとする。
+- 最終deliveryはreview evidence、PR/branch状態、完了checkpoint、review済みstate、Git safety controlを
+  確認してからarchive/Readyへ進む。
+- mergeは明示的委任がない限り人の判断とする。
 
-変更経路の詳細な適用条件、レビューゲート、実行手順は、今後追加するエージェント向け指示とSteeringで定めます。この概要は、それらのファイルや制御がすでに導入済みであることを意味しません。
+## Workspaceとbootstrap
+
+各Git worktreeを独立した可変開発環境として扱います。同梱bootstrapはPython/uv向けの参照実装です。以下を確認します。
+
+- repository/worktree rootの解決。
+- 必須ツールの存在。
+- sync前の`uv.lock`整合性。
+- symlinkまたは別mountされた`.venv`の拒否。
+- `.venv` interpreterが現在worktreeに属すること。
+- 物理repository root、Python version、`pyproject.toml`、`uv.lock`、bootstrap script/configurationを含むstate fingerprint。
+- mutating bootstrapの直列化。
+- Kiro readiness hookから使う非変更・fail-closedな`--check`。
+
+```bash
+./scripts/bootstrap-workspace          # READYを初期化/修復
+./scripts/bootstrap-workspace --check  # 非変更のreadiness検証
+```
+
+別の技術スタックを使う場合は、**この契約を弱めずに実装だけ置き換えてください**。workspace bootstrap/readiness自体を採用しない場合は、
+script・hook・対応するlifecycle checkpointをまとめて外してください。
+
+Kiroの`PreTaskExec` hookはreadiness診断を表示します。ただし、利用中のKiroバージョンで確認していない限りhook自体がタスク開始を
+強制停止すると仮定しません。native task実行前のREADY確認はworkspace ownerの責任です。
+
+## Native Spec互換性
+
+`.kiro/specs/_templates/`はKiro native Spec artifactを補強するもので、独自文法への置換ではありません。native workflow/sectionを
+保持し、その周囲にworkspace identity、requirement traceability、invariant inventory、review matrix、再開可能なtask state、
+delivery checkpointを追加します。
+
+Kiroのnative Spec構造、Task Execution、hook、diagnosticsが変わった場合は、導入中のKiro挙動を確認してテンプレートを更新します。過去のコピーを理由に古いnative contractを固定し続けません。
+
+## レビューとdelivery
+
+Independent Spec Reviewでは、重要な挙動を推測せずに実装へ進めるかを確認します。Independent Code / Requirements Reviewでは、
+実装結果を要件と影響を受けるinvariantに照らして確認します。state、identity/provenance、persistence、status/NULL、security、
+lifecycleなど高リスク領域では必要なstructural/adversarial matrixを使います。
+
+`scripts/finalize-spec`はfail-closedです。レビューPASSを自分で判断しません。呼び出し側が独立レビュー済みのfull commit SHAと具体的なPASS記録URLを渡します。archive前に少なくとも以下を確認します。
+
+- working tree/indexとHEADが、review済みまたは認識済みの機械的delivery stateに一致する。
+- repository Git hooksが設定され、実行可能である。
+- owning PRが同一repositoryのPRで、head/baseが現在branchと`main`に一致する。
+- remote PR HEADが明示的に許可されたdelivery stateに属する。
+- 必要なSpec artifactが揃っている。
+- final review/finalize marker以外のtask/review checkpointが完了している。
+- ローカル/リモートのtreeが認識外の状態になっていない。
+
+Deliveryは意図的に二段階です。まずreview済みSpecにfinal-review結果を記録し、そのSpecをarchiveして、PRがDraftのまま最初の
+機械的commit/pushを行います。次に同じPRをReadyへ遷移させ、その成功を確認します。Ready確認後にだけfinal delivery完了記録を
+書き込み、2つ目の機械的commit/pushを行います。認識済みpartial stateからは安全に再開できます。mergeは手動のままです。
+
+## 導入
+
+[Setup and Customization](docs/setup.md) を参照してください。導入先では次を明示的に定義・調整します。
+
+- 正式なproject/domain requirements。
+- project固有invariantとsecurity/sensitive-data rules。
+- source/test file-match pattern。
+- validation commandとtool provisioning。
+- 利用技術スタックに合ったenvironment/bootstrap実装。
+- 自動レビュー連携（利用する場合）。
+- `github.com`以外や異なるrepository運用を使う場合のGitHub host/repository規約。
+
+製品・業務要件、顧客固有設定、product schema、業務用語、Issue固有履歴はこの汎用テンプレートへ移しません。
+
+同梱Git hooksを利用する場合は、clone/worktree作成後に次を設定します。
+
+```bash
+git config core.hooksPath .githooks
+```
 
 ## 言語方針
 
-リポジトリとGitHubに保存する成果物は、英語を標準とします。対象には以下を含みます。
+リポジトリ/GitHub成果物は英語を正本とします。この日本語READMEは参考訳です。英語版の意味を変更した場合は同じ変更で同期します。対話形式のoperator報告は利用者が希望する言語で構いません。
 
-- 英語版README、`AGENTS.md`、Steering、Spec、技術文書。
-- コードのコメント、docstring、テスト名、技術的な識別子。
-- コミットメッセージ、Issue・PRのタイトルと本文、コメント、レビュー記録。
+## 状態
 
-人への対話形式の報告には、その利用者が希望する言語を使用できます。このリポジトリの保守作業では、日本語で報告します。リポジトリまたはGitHubに保存する報告は英語とします。
+再利用可能なガバナンスとSDD環境一式を収録しています。ただし、導入先ごとの明示的カスタマイズと、利用中のKiro/toolchainバージョンに対する検証は必要です。
 
-`README.ja.md`は、英語版`README.md`の参考訳として明示的に認める例外です。英語版を正本とし、日本語版が独立してルールを再定義することはありません。READMEの内容を変更する際は、両方を同じ変更内で更新し、意味を一致させてください。この例外は、`AGENTS.md`、Steering、Spec、GitHubに保存する報告には適用しません。
+## 位置付け
 
-## 収録予定
-
-以下の構成要素は、まだ収録されていません。追加に合わせて、配置場所とセットアップ手順を記載します。
-
-| 構成要素 | 用途 |
-| --- | --- |
-| `AGENTS.md` | 判断の優先順位、作業範囲、言語、リポジトリの安全性、レビュー方針 |
-| `.kiro/steering/` | 適用範囲を限定したワークフロー、実行、ワークスペース分離、文書化、レビューの指針 |
-| Specテンプレート | 選択したワークフローに応じた要件・設計・タスクの成果物 |
-| タスク用プロンプトテンプレート | タスク固有の目的、制約、検証、引き渡し条件 |
-| レビュー用テンプレート | Independent Spec ReviewとIndependent Code / Requirements Review |
-| セットアップ・カスタマイズ手順 | プロジェクトへの適用と、リポジトリ・環境側の制御設定 |
-
-## 導入と貢献
-
-テンプレートの構成要素が揃い、検証できた段階で、セットアップと互換性の指針を追加します。導入するプロジェクトでは、正式な要件、受け入れ基準、検証コマンド、環境固有の制御を定義する必要があります。
-
-提案や不具合の報告は、[Issues](https://github.com/kunitaya/kiro-sdd-template/issues)で受け付けます。変更範囲を絞り、リポジトリとGitHubの内容は英語で記載し、専用ブランチとPRを通じて提出してください。日本語READMEを変更する場合は、上記の参考訳に関する方針に従ってください。
-
-## プロジェクトの位置付け
-
-本リポジトリは、個人が独立して保守する非公式テンプレートです。Kiroの開発元やOpenAIによる公式製品ではなく、これらの組織による承認を示すものでもありません。
+本リポジトリは独立して保守される非公式テンプレートであり、Kiro、OpenAI、またはそれらの開発元による公式製品・承認物ではありません。
 
 ## ライセンス
 
