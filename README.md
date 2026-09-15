@@ -14,7 +14,8 @@ Use the document that owns the question you are trying to answer:
 
 | Document | Purpose |
 | --- | --- |
-| `docs/setup.md` | One-time adoption and project-specific customization |
+| `docs/setup.md` | One-time adoption and project-specific customization, English authoritative |
+| `docs/setup.ja.md` | One-time adoption and project-specific customization, Japanese reference |
 | `docs/development-operations-runbook.md` | Daily development workspace operations, English authoritative |
 | `docs/development-operations-runbook.ja.md` | Daily development workspace operations, Japanese reference |
 | `AGENTS.md` | Repository-wide AI development and safety policy |
@@ -61,9 +62,9 @@ project-specific permission adaptations belong in `docs/setup.md`.
 
 English is authoritative for repository/GitHub artifacts.
 
-Human-facing documents used routinely for setup or operations may have a Japanese
-reference translation. The development operations runbook is intentionally maintained in
-both English and Japanese and must be updated together.
+Human-facing setup and operations documents may have Japanese reference translations.
+`README.md` / `README.ja.md`, `docs/setup.md` / `docs/setup.ja.md`, and the development
+operations runbook pair are maintained together whenever their meaning changes.
 
 AI-facing policy, steering, and Spec templates remain English unless the adopting
 repository explicitly defines another authority model.
