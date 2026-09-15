@@ -1,38 +1,207 @@
 #!/bin/sh
-# Generic per-worktree Python/uv bootstrap example.
-# Adapt or replace this script for non-Python projects; keep the --check contract if the Kiro hook is retained.
+# Deterministic per-worktree Python/uv workspace bootstrap example.
+#
+# Usage:
+#   ./scripts/bootstrap-workspace          # establish/repair READY
+#   ./scripts/bootstrap-workspace --check  # non-mutating READY verification
+#
+# This is intentionally generic infrastructure rather than product logic. Projects
+# using a different runtime/environment manager should replace this implementation
+# while preserving an explicit mutating setup path and a fail-closed, non-mutating
+# readiness check if the Kiro PreTaskExec hook is retained.
+
 set -eu
 
-mode=mutate
-if [ "${1:-}" = "--check" ]; then mode=check; shift; fi
-if [ "$#" -ne 0 ]; then echo "usage: ./scripts/bootstrap-workspace [--check]" >&2; exit 64; fi
-
-fail() { echo "WORKSPACE_NOT_READY" >&2; echo "$1" >&2; [ "$mode" = check ] && exit 2 || exit 1; }
-
-command -v git >/dev/null 2>&1 || fail "git is required"
-command -v uv >/dev/null 2>&1 || fail "uv is required; adapt scripts/bootstrap-workspace if this project uses another environment manager"
-root=$(git rev-parse --show-toplevel 2>/dev/null) || fail "not inside a Git worktree"
-cd "$root"
-
-[ -f pyproject.toml ] || fail "pyproject.toml is missing; adapt the bootstrap script for this repository"
-[ -f uv.lock ] || fail "uv.lock is missing; adapt the bootstrap script or generate the project lockfile through the normal dependency workflow"
-
-if [ -L .venv ]; then fail ".venv must not be a symlink to another worktree/environment"; fi
-
-ready() {
-  [ -x .venv/bin/python ] || return 1
-  .venv/bin/python -c 'import sys; print(sys.executable)' >/dev/null 2>&1 || return 1
-  return 0
-}
-
-if [ "$mode" = check ]; then
-  ready || fail "workspace environment is not READY; run ./scripts/bootstrap-workspace"
-  echo "WORKSPACE_READY"
-  exit 0
+MODE=mutate
+if [ "${1:-}" = "--check" ]; then
+    MODE=check
+    shift
+fi
+if [ "$#" -ne 0 ]; then
+    printf '%s\n' "usage: ./scripts/bootstrap-workspace [--check]" >&2
+    exit 64
 fi
 
-uv sync
-ready || fail "uv sync completed but .venv is not READY"
-mkdir -p .local/kiro-scratch
-printf '%s\n' "WORKSPACE_READY" > .local/kiro-scratch/bootstrap-state.txt
-echo "WORKSPACE_READY"
+FAIL_EXIT=1
+[ "$MODE" = check ] && FAIL_EXIT=2
+
+fail() {
+    token="$1"
+    shift
+    printf '%s\n' "$token" >&2
+    for line in "$@"; do
+        printf '%s\n' "$line" >&2
+    done
+    exit "$FAIL_EXIT"
+}
+
+for tool in git uv realpath sha256sum flock date mkdir mv mountpoint; do
+    command -v "$tool" >/dev/null 2>&1 || \
+        fail WORKSPACE_TOOLING_MISSING "Required tool not found on PATH: $tool"
+done
+
+raw_root=$(git rev-parse --show-toplevel 2>/dev/null) || \
+    fail WORKSPACE_NOT_A_GIT_REPO "Current directory is not inside a Git worktree."
+ROOT=$(realpath -- "$raw_root" 2>/dev/null) || \
+    fail WORKSPACE_ROOT_UNRESOLVABLE "Could not resolve the physical worktree root."
+cd "$ROOT"
+
+[ -f pyproject.toml ] || \
+    fail WORKSPACE_IDENTITY_MISMATCH "pyproject.toml is missing; adapt the bootstrap contract for this repository."
+[ -f uv.lock ] || \
+    fail WORKSPACE_LOCK_MISSING "uv.lock is missing; create/update the lock through the normal dependency workflow first."
+
+if [ -L .venv ]; then
+    fail WORKSPACE_VENV_FOREIGN ".venv is a symlink; mutable environments must not be shared across worktrees."
+fi
+if [ -e .venv ] && mountpoint -q -- .venv; then
+    fail WORKSPACE_VENV_BIND_MOUNTED ".venv is a mount point; refusing a potentially shared mutable environment."
+fi
+
+if ! lock_output=$(uv lock --check 2>&1); then
+    fail WORKSPACE_LOCK_INCONSISTENT "uv lock --check failed." "$lock_output"
+fi
+
+STATE_DIR=".local/kiro-scratch"
+STATE_FILE="$STATE_DIR/bootstrap-state.json"
+LOCK_FILE="$STATE_DIR/bootstrap-workspace.lock"
+
+verify_python_binding() {
+    [ -x .venv/bin/python ] || return 1
+    .venv/bin/python -B - "$ROOT" <<'PY' >/dev/null 2>&1
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1]).resolve()
+expected = (root / ".venv").resolve()
+prefix = pathlib.Path(sys.prefix).resolve()
+exe = pathlib.Path(sys.executable).resolve()
+if prefix != expected:
+    raise SystemExit(2)
+if exe != expected and expected not in exe.parents:
+    raise SystemExit(2)
+PY
+}
+
+compute_values() {
+    verify_python_binding || \
+        fail WORKSPACE_VENV_NOT_READY ".venv/bin/python is missing or is not bound to this worktree's .venv."
+    PYTHON_VERSION=$(.venv/bin/python -B -c 'import sys; print("{}.{}.{}".format(*sys.version_info[:3]))')
+    PYPROJECT_SHA=$(sha256sum -- pyproject.toml | awk '{print $1}')
+    UVLOCK_SHA=$(sha256sum -- uv.lock | awk '{print $1}')
+}
+
+state_matches() {
+    [ -f "$STATE_FILE" ] || return 1
+    .venv/bin/python -B - "$STATE_FILE" "$ROOT" "$PYTHON_VERSION" "$PYPROJECT_SHA" "$UVLOCK_SHA" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+expected = {
+    "format_version": 1,
+    "repo_root": sys.argv[2],
+    "python_version": sys.argv[3],
+    "pyproject_sha256": sys.argv[4],
+    "uv_lock_sha256": sys.argv[5],
+}
+try:
+    raw = path.read_bytes().decode("utf-8")
+    data = json.loads(raw)
+except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+    raise SystemExit(1)
+if not isinstance(data, dict):
+    raise SystemExit(1)
+if set(data) != set(expected) | {"bootstrapped_at"}:
+    raise SystemExit(1)
+if not isinstance(data.get("bootstrapped_at"), str) or not data["bootstrapped_at"]:
+    raise SystemExit(1)
+for key, value in expected.items():
+    if data.get(key) != value:
+        raise SystemExit(1)
+PY
+}
+
+write_state() {
+    bootstrapped_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+    .venv/bin/python -B - "$STATE_DIR" "$STATE_FILE" "$ROOT" "$PYTHON_VERSION" "$PYPROJECT_SHA" "$UVLOCK_SHA" "$bootstrapped_at" <<'PY'
+import json
+import os
+import pathlib
+import sys
+import tempfile
+
+state_dir = pathlib.Path(sys.argv[1])
+state_file = pathlib.Path(sys.argv[2])
+state_dir.mkdir(parents=True, exist_ok=True)
+data = {
+    "format_version": 1,
+    "repo_root": sys.argv[3],
+    "python_version": sys.argv[4],
+    "pyproject_sha256": sys.argv[5],
+    "uv_lock_sha256": sys.argv[6],
+    "bootstrapped_at": sys.argv[7],
+}
+fd, tmp_name = tempfile.mkstemp(prefix="bootstrap-state-", suffix=".tmp", dir=state_dir)
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(tmp_name, state_file)
+finally:
+    try:
+        os.unlink(tmp_name)
+    except FileNotFoundError:
+        pass
+PY
+}
+
+check_ready() {
+    compute_values
+    state_matches || \
+        fail WORKSPACE_STATE_STALE "Bootstrap fingerprint does not match this worktree/root/Python/pyproject.toml/uv.lock. Run ./scripts/bootstrap-workspace."
+    verify_python_binding || \
+        fail WORKSPACE_VENV_NOT_READY "The recorded environment is no longer bound to this worktree."
+}
+
+if [ "$MODE" = check ]; then
+    # Do not create the lock file in check mode. If the mutating path has created it,
+    # a shared lock ensures the check does not race an active repair.
+    if [ -f "$LOCK_FILE" ]; then
+        if ! flock -s -w 5 "$LOCK_FILE" sh -c ':'; then
+            fail WORKSPACE_BOOTSTRAP_BUSY "A workspace bootstrap mutation is in progress."
+        fi
+    fi
+    check_ready
+    printf '%s\n' "WORKSPACE_READY"
+    exit 0
+fi
+
+mkdir -p "$STATE_DIR"
+# Serialize mutating bootstrap operations per worktree. A bounded wait fails closed
+# instead of letting concurrent uv sync operations race over the same .venv.
+exec 9>"$LOCK_FILE"
+if ! flock -x -w 30 9; then
+    fail WORKSPACE_BOOTSTRAP_BUSY "Could not acquire the per-worktree bootstrap lock."
+fi
+
+# Fast path: an unchanged, live, correctly bound environment needs no sync.
+if [ -x .venv/bin/python ]; then
+    compute_values
+    if state_matches && verify_python_binding; then
+        printf '%s\n' "WORKSPACE_READY"
+        exit 0
+    fi
+fi
+
+if ! sync_output=$(uv sync --locked 2>&1); then
+    fail WORKSPACE_SYNC_FAILED "uv sync --locked failed." "$sync_output"
+fi
+
+compute_values
+write_state
+check_ready
+printf '%s\n' "WORKSPACE_READY"
