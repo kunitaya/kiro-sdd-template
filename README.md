@@ -8,20 +8,21 @@ repository; mature project-independent governance and safety controls remain her
 
 This is **not** a shortened rewrite of the source workflow.
 
-## Documentation map
+## Start here
+
+Use the document that owns the question you are trying to answer:
 
 | Document | Purpose |
 | --- | --- |
-| `README.md` / `README.ja.md` | Overview and entry points |
 | `docs/setup.md` | One-time adoption and project-specific customization |
-| `docs/development-operations-runbook.md` | Daily development operations runbook, English authoritative |
-| `docs/development-operations-runbook.ja.md` | Daily development operations runbook, Japanese reference |
+| `docs/development-operations-runbook.md` | Daily development workspace operations, English authoritative |
+| `docs/development-operations-runbook.ja.md` | Daily development workspace operations, Japanese reference |
 | `AGENTS.md` | Repository-wide AI development and safety policy |
 | `.kiro/steering/` | Scoped execution, review, workspace, SDD, source, and test guidance |
 | `.kiro/specs/README.md` | Spec directory and lifecycle conventions |
 
-Keep those responsibilities separate. Prefer stable links over duplicating detailed
-policy or operating procedures across files.
+Keep those responsibilities separate. Prefer links to the owning document over copying
+its detailed rules or procedures into another file.
 
 ## Included components
 
@@ -32,95 +33,40 @@ policy or operating procedures across files.
 | `.githooks/` | Guards against direct commit/push to `main` |
 | `scripts/bootstrap-workspace` | Deterministic Python/uv per-worktree bootstrap |
 | `scripts/finalize-spec` / `scripts/finalize_spec.py` | Fail-closed reviewed Spec delivery |
-| `templates/permissions.yaml` | Reviewed Kiro workspace-permissions source template |
+| `templates/permissions.yaml` | Reviewed source template for Kiro workspace permissions |
 | `templates/kiro-task-prompt.md` | Bounded task-prompt template |
 | `.markdownlint.json` | Shared Markdown validation baseline |
 | `src/`, `tests/`, `docs/` | Generic tracked repository skeleton |
 
-## Core workflow
+## Operating model
 
-```text
-Authoritative project requirements + GitHub Issue
-    ↓
-Choose Direct Change or Kiro Spec by semantic risk
-    ↓
-Requirements / Design / Bugfix -> tasks.md
-    ↓
-Dedicated branch/worktree + Draft PR
-    ↓
-Independent Spec Review
-    ↓
-Native Kiro Spec Task Execution
-    ↓
-Implementation + proportionate validation
-    ↓
-Independent Code / Requirements Review
-    ↓
-Reviewed mechanical Spec delivery + PR Ready
-    ↓
-Human merge gate
-```
+For a new adopting repository, begin with
+[Setup and Customization](docs/setup.md).
 
-Detailed lifecycle rules live in `#sdd-workflow`, `#review`, and
-`.kiro/specs/README.md`.
+For normal Issue/worktree startup, Kiro workspace permissions, readiness checks,
+validation, review handoff, finalization, and recovery, use the
+[Development Operations Runbook](docs/development-operations-runbook.md).
 
-## Core principles
-
-- higher-authority requirements are never rewritten to fit current code;
-- one Issue normally owns one branch and one PR;
-- Kiro native artifact/task lifecycle is preserved;
-- worktrees are isolated by runtime root/branch/repository identity;
-- workspace READY represents the current worktree/runtime/dependency/bootstrap state;
-- validation uses already-provisioned tools rather than task-time package acquisition;
-- automated review is supplemental evidence, not an authority;
-- only BLOCKING findings create mandatory correction rounds;
-- final delivery is fail-closed and merge remains a human/operator decision unless
-  explicitly delegated.
+The detailed SDD and review lifecycle is owned by `#sdd-workflow`, `#review`, and
+`.kiro/specs/README.md`; this README intentionally does not duplicate it.
 
 ## Kiro permissions
 
-`templates/permissions.yaml` is a **source template**, not the active trust file.
-
-Kiro 1.0 stores workspace-scoped permissions outside the repository:
-
-```text
-~/.kiro/workspace-roots/<hash>/permissions.yaml
-```
-
-This prevents a clone from granting itself trust. Install and review the active
-workspace copy manually.
-
-The template preserves generic safety rules and intentionally omits product-specific
-paths, package/import names, fixed runtime versions, test-only environment variables,
-and domain-specific documentation hosts.
-
-See the
-[Development Operations Runbook](docs/development-operations-runbook.md)
-for daily installation/verification procedure and
-[Setup and Customization](docs/setup.md)
-for project-specific adaptation.
-
-## Workspace readiness and delivery
-
-The included bootstrap and finalizer are production-derived safety mechanisms.
-
-Do not rewrite them as shorter approximations. Adapt only documented project/transport
-boundaries and preserve their generic state machines.
-
-- Bootstrap customization contract: [Setup and Customization](docs/setup.md)
-- Daily READY procedure: [Development Operations Runbook](docs/development-operations-runbook.md)
-- Spec delivery lifecycle: [.kiro/specs/README.md](.kiro/specs/README.md)
+`templates/permissions.yaml` is a reviewed **source template**, not an active trust file.
+Kiro keeps workspace-scoped permissions outside the repository so a clone cannot grant
+itself trust. Installation and verification are documented in the operations runbook;
+project-specific permission adaptations belong in `docs/setup.md`.
 
 ## Language policy
 
 English is authoritative for repository/GitHub artifacts.
 
-Human-facing documents that are used routinely for setup or operations may have a
-Japanese reference translation. The daily operations runbook is intentionally maintained
-in both English and Japanese and must be updated together.
+Human-facing documents used routinely for setup or operations may have a Japanese
+reference translation. The development operations runbook is intentionally maintained in
+both English and Japanese and must be updated together.
 
 AI-facing policy, steering, and Spec templates remain English unless the adopting
-repository explicitly defines another authoritative language model.
+repository explicitly defines another authority model.
 
 ## Status
 
