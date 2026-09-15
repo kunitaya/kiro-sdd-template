@@ -39,4 +39,5 @@ Final report:
 State completed outcome, validation actually run, changed/published state, and remaining BLOCKING/unverified items.
 ```
 
-Do not duplicate full Issue/Spec/steering text into the prompt. Another steering file may require a short delegation-time constraint to be restated; preserve those explicit requirements.
+Do not duplicate full Issue/Spec/steering text into the prompt. Another steering file may require a short
+delegation-time constraint to be restated; preserve those explicit requirements.

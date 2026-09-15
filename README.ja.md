@@ -4,9 +4,11 @@
 
 > このファイルは英語版 `README.md` の参考訳です。意味が異なる場合は英語版を優先し、英語版を変更する際はこのファイルも同じ変更で同期してください。
 
-Kiroを用いたSpec-Driven Development（SDD）環境を再利用するためのテンプレートです。実運用向けのAI支援開発フローから、製品・業務固有の要件だけを除去し、成熟した開発ガバナンスと安全制御を保持することを目的としています。
+Kiroを用いたSpec-Driven Development（SDD）環境を再利用するためのテンプレートです。実運用向けのAI支援開発フローから、
+製品・業務固有の要件だけを除去し、成熟した開発ガバナンスと安全制御を保持することを目的としています。
 
-これは元ワークフローの「短縮版」ではありません。要件の権威、Kiro native Spec構造、worktree分離、決定論的なworkspace readiness、レビュー収束、fail-closedな最終delivery、人によるmerge gateなど、プロジェクト非依存の重要な運用深度は維持します。
+これは元ワークフローの「短縮版」ではありません。要件の権威、Kiro native Spec構造、worktree分離、決定論的なworkspace readiness、
+レビュー収束、fail-closedな最終delivery、人によるmerge gateなど、プロジェクト非依存の重要な運用深度は維持します。
 
 ## 収録内容
 
@@ -64,12 +66,14 @@ Independent Code / Requirements Review
 - Kiro nativeのartifact/task lifecycleを独自の簡易形式に置き換えない。
 - タスクプロンプトにはタスク固有情報を載せ、リポジトリ共通方針を重複させない。
 - worktreeはroot/branch/repository identityを実行時に確認して分離する。
-- workspace READYは「Pythonが存在する」ではなく、現在のworktree/runtime/dependency状態が記録されたbootstrap fingerprintと一致することを意味する。
+- workspace READYは「Pythonが存在する」ではなく、現在のworktree/runtime/dependency状態が記録された
+  bootstrap fingerprintと一致することを意味する。
 - lint/validationでは既に用意されたツールを使い、パッケージ取得runnerで代用しない。
 - 検証証拠はリスクに応じて取得し、無意味に何度も再実行しない。
 - 自動レビューは補助証拠であり、権威や独立レビューの代替ではない。
 - BLOCKINGだけを必須修正ラウンドとする。
-- 最終deliveryはreview evidence、PR/branch状態、完了checkbox、clean reviewed HEAD、Git safety controlを確認してからarchive/Readyへ進む。
+- 最終deliveryはreview evidence、PR/branch状態、完了checkbox、clean reviewed HEAD、Git safety controlを
+  確認してからarchive/Readyへ進む。
 - mergeは明示的委任がない限り人の判断とする。
 
 ## Workspaceとbootstrap
@@ -90,19 +94,25 @@ Independent Code / Requirements Review
 ./scripts/bootstrap-workspace --check  # 非変更のreadiness検証
 ```
 
-別の技術スタックを使う場合は、**この契約を弱めずに実装だけ置き換えてください**。workspace bootstrap/readiness自体を採用しない場合は、script・hook・対応するlifecycle checkpointをまとめて外してください。
+別の技術スタックを使う場合は、**この契約を弱めずに実装だけ置き換えてください**。workspace bootstrap/readiness自体を採用しない場合は、
+script・hook・対応するlifecycle checkpointをまとめて外してください。
 
-Kiroの`PreTaskExec` hookはreadiness診断を表示します。ただし、利用中のKiroバージョンで確認していない限りhook自体がタスク開始を強制停止すると仮定しません。native task実行前のREADY確認はworkspace ownerの責任です。
+Kiroの`PreTaskExec` hookはreadiness診断を表示します。ただし、利用中のKiroバージョンで確認していない限りhook自体がタスク開始を
+強制停止すると仮定しません。native task実行前のREADY確認はworkspace ownerの責任です。
 
 ## Native Spec互換性
 
-`.kiro/specs/_templates/`はKiro native Spec artifactを補強するもので、独自文法への置換ではありません。native workflow/sectionを保持し、その周囲にworkspace identity、requirement traceability、invariant inventory、review matrix、再開可能なtask state、delivery checkpointを追加します。
+`.kiro/specs/_templates/`はKiro native Spec artifactを補強するもので、独自文法への置換ではありません。native workflow/sectionを
+保持し、その周囲にworkspace identity、requirement traceability、invariant inventory、review matrix、再開可能なtask state、
+delivery checkpointを追加します。
 
 Kiroのnative Spec構造、Task Execution、hook、diagnosticsが変わった場合は、導入中のKiro挙動を確認してテンプレートを更新します。過去のコピーを理由に古いnative contractを固定し続けません。
 
 ## レビューとdelivery
 
-Independent Spec Reviewでは、重要な挙動を推測せずに実装へ進めるかを確認します。Independent Code / Requirements Reviewでは、実装結果を要件と影響を受けるinvariantに照らして確認します。state、identity/provenance、persistence、status/NULL、security、lifecycleなど高リスク領域では必要なstructural/adversarial matrixを使います。
+Independent Spec Reviewでは、重要な挙動を推測せずに実装へ進めるかを確認します。Independent Code / Requirements Reviewでは、
+実装結果を要件と影響を受けるinvariantに照らして確認します。state、identity/provenance、persistence、status/NULL、security、
+lifecycleなど高リスク領域では必要なstructural/adversarial matrixを使います。
 
 `scripts/finalize-spec`はfail-closedです。レビューPASSを自分で判断しません。呼び出し側が独立レビュー済みのfull commit SHAと具体的なPASS記録URLを渡します。archive前に少なくとも以下を確認します。
 
