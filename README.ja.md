@@ -14,7 +14,8 @@ development governanceとsafety controlをこのテンプレートで維持し�
 
 | 文書 | 役割 |
 | --- | --- |
-| `docs/setup.md` | 初回導入とproject固有customization |
+| `docs/setup.md` | 初回導入とproject固有customization・英語正本 |
+| `docs/setup.ja.md` | 初回導入とproject固有customization・日本語参考訳 |
 | `docs/development-operations-runbook.md` | 日常開発workspace運用手順書・英語正本 |
 | `docs/development-operations-runbook.ja.md` | 日常開発workspace運用手順書・日本語参考訳 |
 | `AGENTS.md` | repository共通のAI development / safety policy |
@@ -40,7 +41,7 @@ development governanceとsafety controlをこのテンプレートで維持し�
 ## 運用モデル
 
 新しいrepositoryへ導入する場合は、まず
-[Setup and Customization](docs/setup.md)
+[セットアップとカスタマイズ](docs/setup.ja.md)
 を参照してください。
 
 通常のIssue/worktree開始、Kiro workspace permissions、READY確認、validation、review handoff、
@@ -55,14 +56,15 @@ READMEでは重複して説明しません。
 
 `templates/permissions.yaml` はactive trust fileではなく、review対象となる **source template** です。
 Kiroのworkspace-scoped permissionsはrepository外に保存され、cloneしたrepository自身がtrustを付与できない構造です。
-active fileのinstall・確認は開発運用手順書、project固有permissionのadaptationは `docs/setup.md` を参照してください。
+active fileのinstall・確認は開発運用手順書、project固有permissionのadaptationは `docs/setup.ja.md` を参照してください。
 
 ## 言語方針
 
 repository/GitHub artifactは英語を正本とします。
 
-日常的に人間が使用するsetup/operation文書は日本語参考訳を持つことができます。
-開発運用手順書は英日両方を維持し、意味を変更する場合は同じ変更で同期します。
+人間向けのsetup / operation文書は日本語参考訳を持つことができます。
+`README.md` / `README.ja.md`、`docs/setup.md` / `docs/setup.ja.md`、開発運用手順書の英日ペアは、
+意味を変更する場合に同じ変更で同期します。
 
 AI向けpolicy、steering、Spec templateは、導入先repositoryが別のauthority modelを明示しない限り英語を維持します。
 
